@@ -1,0 +1,78 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      netstandard2.0 is the floor: it is the one API level that reaches both classic
+      .NET Framework (WinForms/WPF till software, ASP.NET) and modern .NET. net8.0 is the
+      same code without the System.Text.Json dependency, and is what .NET 8+ apps use.
+
+      Declared support: .NET Framework 4.6.2+ and .NET 8+ (see docs/compatibility.md, which also
+      records what was and was not run, and the dates on which each of those stops being
+      supported by Microsoft: .NET 8 on 2026-11-10, .NET Framework 4.6.2 on 2027-01-12).
+      4.6.2 is System.Text.Json 8's own floor; below it (4.6.1 and older) the package refuses to
+      build cleanly, so do not lower the floor without redoing that analysis.
+
+      VerifyNetFramework is a COMPILE GATE, not a shipped asset: -p:VerifyNetFramework=true adds a
+      net462 build of this same source, so an API that does not exist on .NET Framework 4.6.2
+      breaks the build here rather than in a customer's till. Never pack with it set - the
+      package would gain a lib/net462 asset and change what every .NET Framework app resolves.
+    -->
+    <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
+    <TargetFrameworks Condition="'$(VerifyNetFramework)' == 'true'">netstandard2.0;net8.0;net462</TargetFrameworks>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>AmwalPay.Ecr</RootNamespace>
+    <AssemblyName>AmwalPay.Ecr</AssemblyName>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Deterministic>true</Deterministic>
+    <!-- Repo-relative source paths in CI builds, so the same commit packs byte-identically. -->
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true' Or '$(TF_BUILD)' == 'true' Or '$(CM_BUILD_ID)' != ''">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <!-- NuGet package. The version is what increment_version.sh bumps. -->
+  <PropertyGroup>
+    <PackageId>AmwalPay.Ecr</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Amwal Pay</Authors>
+    <Company>Amwal Pay</Company>
+    <Product>Amwal ECR SDK</Product>
+    <Description>Amwal POS terminal ECR SDK for .NET: take payments, voids, refunds and inquiries on an Amwal terminal over the local network (Wi-Fi/LAN) or Web Service ECR. Supports .NET Framework 4.7.2+ and .NET 8+; no card data touches your application.</Description>
+    <PackageTags>amwal;pos;ecr;payments;payment-terminal;point-of-sale;sdk;netstandard</PackageTags>
+    <PackageProjectUrl>https://amwal-pay.com</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/amwal-pay/AmwalpayEcrWindows</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <Copyright>Copyright (c) Amwal Pay</Copyright>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <!-- 8.0.5 is the first 8.x free of the published advisories (8.0.4 and lower are flagged High);
+       8.0.6 is the latest 8.x. NuGet resolves the LOWEST version that satisfies this, so this
+       is the version consumers get unless they choose a newer one. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0' Or '$(TargetFramework)' == 'net462'">
+    <PackageReference Include="System.Text.Json" Version="8.0.6" />
+  </ItemGroup>
+
+  <!-- A .NET Framework project does not reference System.Net.Http by default; netstandard2.0 gets it
+       from NETStandard.Library. Only the compile gate needs this. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net462'">
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="AmwalPay.Ecr.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,15 @@
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.idea/
+*.nupkg
+*.snupkg
+artifacts/
+TestResults/
+
+# Publishing secrets: the NuGet API key never lives in the repo.
+nuget.config.local
+*.pfx
+.env

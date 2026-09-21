@@ -1,0 +1,36 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{4D75A44B-91B9-42DE-8A3C-A0DF1438D1DA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AmwalPay.Ecr", "src\AmwalPay.Ecr\AmwalPay.Ecr.csproj", "{66B2D492-E3BA-4313-BE03-094CE939BD28}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{A9880FF9-7137-4A8D-A8D3-A85576316BA4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AmwalPay.Ecr.Tests", "tests\AmwalPay.Ecr.Tests\AmwalPay.Ecr.Tests.csproj", "{0F9AC40F-08F7-48C7-865E-48280A0AEB77}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{66B2D492-E3BA-4313-BE03-094CE939BD28}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{66B2D492-E3BA-4313-BE03-094CE939BD28}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{66B2D492-E3BA-4313-BE03-094CE939BD28}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{66B2D492-E3BA-4313-BE03-094CE939BD28}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0F9AC40F-08F7-48C7-865E-48280A0AEB77}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0F9AC40F-08F7-48C7-865E-48280A0AEB77}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0F9AC40F-08F7-48C7-865E-48280A0AEB77}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0F9AC40F-08F7-48C7-865E-48280A0AEB77}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{66B2D492-E3BA-4313-BE03-094CE939BD28} = {4D75A44B-91B9-42DE-8A3C-A0DF1438D1DA}
+		{0F9AC40F-08F7-48C7-865E-48280A0AEB77} = {A9880FF9-7137-4A8D-A8D3-A85576316BA4}
+	EndGlobalSection
+EndGlobal

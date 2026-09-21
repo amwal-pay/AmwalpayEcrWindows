@@ -1,0 +1,29 @@
+name: Trigger Codemagic Build
+
+on:
+  pull_request:
+    branches:
+      - prod
+  workflow_dispatch:
+
+jobs:
+  trigger-codemagic:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Codemagic Build
+        env:
+          CODEMAGIC_API_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}
+          CODEMAGIC_APP_ID: ${{ secrets.CODEMAGIC_APP_ID }}
+        run: |
+          if [ -z "$CODEMAGIC_API_TOKEN" ] || [ -z "$CODEMAGIC_APP_ID" ]; then
+            echo "Error: set GitHub secrets CODEMAGIC_API_TOKEN and CODEMAGIC_APP_ID"
+            exit 1
+          fi
+          curl -f -H "Content-Type: application/json" \
+               -H "x-auth-token: ${CODEMAGIC_API_TOKEN}" \
+               --data "{
+                 \"appId\": \"${CODEMAGIC_APP_ID}\",
+                 \"workflowId\": \"ecr-sdk-publish\",
+                 \"branch\": \"prod\"
+               }" \
+               -X POST https://api.codemagic.io/builds

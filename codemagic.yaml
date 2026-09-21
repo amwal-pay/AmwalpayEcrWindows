@@ -1,0 +1,80 @@
+workflows:
+  ecr-sdk-publish:
+    name: Publish ECR SDK to NuGet
+    # The SDK is plain managed code (netstandard2.0 + net8.0), so it packs and
+    # tests on any OS; the Mac runner is the one the other Amwal workflows use.
+    instance_type: mac_mini_m1
+    environment:
+      groups:
+        - A
+        - nuget_credentials
+      dotnet: 8.0
+    cache:
+      cache_paths:
+        - ~/.nuget/packages
+    scripts:
+      - name: Install .NET 8 SDK
+        script: |
+          # Codemagic's macOS images do not guarantee a .NET SDK; install one
+          # only when the version we need is missing.
+          if ! dotnet --list-sdks 2>/dev/null | grep -q '^8\.'; then
+            brew install --cask dotnet-sdk || brew install dotnet@8
+          fi
+          dotnet --info | head -20
+      - name: Compile gate - the SDK's own source on .NET Framework 4.6.2
+        script: |
+          # The declared floor is .NET Framework 4.6.2. This builds the same source for net462 so an
+          # API that only exists on newer frameworks breaks the build here. It is a gate only:
+          # nothing built with VerifyNetFramework is packed or published.
+          dotnet build src/AmwalPay.Ecr -c Release -p:VerifyNetFramework=true --nologo
+      - name: Run unit tests
+        script: |
+          dotnet test AmwalECR.sln -c Release --nologo
+      - name: Increment Version
+        script: |
+          chmod +x ./increment_version.sh
+          ./increment_version.sh
+      - name: Publish SDK with Version Increment
+        script: |
+          chmod +x ./publish.sh
+          ./publish.sh
+    artifacts:
+      - artifacts/*.nupkg
+      - artifacts/*.snupkg
+
+  ecr-sdk-windows-tests:
+    name: Run the SDK tests on .NET Framework 4.6.2 / 4.7.2 and .NET 8 (Windows)
+    # The declared support floor is .NET Framework 4.6.2, and nothing else in this repository
+    # executes the netstandard2.0 build on .NET Framework: the Mac publish workflow above only runs
+    # the net8.0 tests. This one does. On Windows the test project targets net8.0, net462 and net472
+    # (and net10.0 when the runner's .NET SDK is 10+); see
+    # tests/AmwalPay.Ecr.Tests/AmwalPay.Ecr.Tests.csproj.
+    #
+    # Read the result honestly: .NET Framework 4.x versions are in-place updates, so a runner with
+    # 4.8 installed executes the net462 and net472 tests on the 4.8 runtime. It proves the
+    # netstandard2.0 build works there; it cannot prove 4.6.2's own runtime. Say so in any release
+    # note that cites this workflow.
+    #
+    # No trigger is configured: start it by hand, or from the API, before publishing a release.
+    # A failure on net462 alone means the compatibility statement in docs/compatibility.md is
+    # wrong until fixed. Dates to revisit that statement by: .NET 8/9 end 2026-11-10 and
+    # .NET Framework 4.6.2 ends 2027-01-12.
+    instance_type: windows_x2
+    max_build_duration: 30
+    scripts:
+      - name: Compile gate for .NET Framework 4.6.2
+        script: |
+          dotnet build src\AmwalPay.Ecr -c Release -p:VerifyNetFramework=true --nologo
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      - name: Test on .NET 8
+        script: |
+          dotnet test AmwalECR.sln -c Release -f net8.0 --nologo
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      - name: Test on .NET Framework 4.6.2
+        script: |
+          dotnet test tests\AmwalPay.Ecr.Tests -c Release -f net462 --nologo
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      - name: Test on .NET Framework 4.7.2
+        script: |
+          dotnet test tests\AmwalPay.Ecr.Tests -c Release -f net472 --nologo
+          if ($LASTEXITCODE -ne 0) { exit 1 }
