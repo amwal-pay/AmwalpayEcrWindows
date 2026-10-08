@@ -97,7 +97,7 @@ namespace AmwalPay.Ecr.Tests.WebService
             }
 
             Assert.Equal(
-                new[] { "/Ecr/Sale", "/Ecr/Void", "/Ecr/Refund", "/Ecr/TransactionStatus" },
+                new[] { "/Ecr/Sale", "/Ecr/Void", "/Ecr/Refund", "/Ecr/Inquiry" },
                 handler.Requests.ConvertAll(r => r.RequestUri!.AbsolutePath).ToArray());
         }
 

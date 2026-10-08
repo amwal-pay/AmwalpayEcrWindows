@@ -255,10 +255,12 @@ unreadable body or an HTTP 5xx with no message (`ResponseCode` is the status, e.
 `502`) — and the HTTP layer synthesised a `success:false` envelope, which the SDK
 reads as a decline but marks with `nextStep: INQUIRE_BY_MERCHANT_REFERENCE`. The Hub
 may have processed the sale. **Do not resend it.** `Declined.NextStep` is the
-reliable signal; `NO_RESPONSE` is only the commonest cause. Inquire by receipt
-number (`InquireAsync(receiptNumber, transactionDate)`) — take the number from the
-terminal's screen or receipt, or from the Hub's back office — or reconcile against
-the terminal's batch. `result.Raw` for a synthesised answer is just
+reliable signal; `NO_RESPONSE` is only the commonest cause. Call
+`InquireByReferenceAsync` with the sale's `merchantReference` (date may be blank),
+or `InquireAsync(receiptNumber, transactionDate)` if you already have the STAN
+from the terminal's screen, receipt, or Hub back office. Reconcile against the
+batch if the lookup still leaves the outcome unknown. `result.Raw` for a
+synthesised answer is just
 `{"success":false,"responseCode":"NO_RESPONSE","message":"…","nextStep":"INQUIRE_BY_MERCHANT_REFERENCE"}`.
 A `Declined` with `NextStep.None` — a real Hub refusal, or an HTTP 4xx with no
 readable message — is final.
@@ -267,9 +269,9 @@ readable message — is final.
 
 The inquiry's own request hit a transport failure (timeout, no network, empty or
 unreadable reply, 5xx), so the lookup did not happen. That is not "not found" and
-not a finding — it is still unknown. Ask again. `EcrInquiry.NotFound` is a genuine
-answer from the Hub, except from `InquireByReferenceAsync`, which on Web Service is
-not a real by-reference lookup (see below).
+not a finding — it is still unknown. Ask again with the same
+`InquireAsync` / `InquireByReferenceAsync` call. `EcrInquiry.NotFound` is a
+genuine "no such transaction" answer from the Hub.
 
 ### Web Service ECR on .NET Framework: TLS 1.2
 
@@ -307,20 +309,19 @@ requires credentials or intercepts TLS shows up as `NO_RESPONSE` or an HTTP `407
 
 ## Signing and keys
 
-### Web Service inquiry by merchant reference does not work
+### Web Service inquiry by merchant reference
 
-`EcrWebServiceTerminal.InquireByReferenceAsync()` is present in the API but does not
-look anything up by reference: it sends an inquiry with an **empty receipt number**
-and no `originalMerchantReference` on the Hub JSON body. Use
-`InquireAsync(receiptNumber, transactionDate)` with a STAN, or use **LAN ECR** for
-reference-based lookup until the wire field is added. Do not read its result as
-proof a sale did not happen.
+Use `InquireByReferenceAsync()` (or set `OriginalMerchantReference` on the
+transaction-status request with an empty `stan`). The SDK sends
+`originalMerchantReference` and leaves `stan` empty. For lookup by receipt
+number, keep using `InquireAsync(receiptNumber, transactionDate)`.
 
 ### Auto-recovery after timeout is LAN-only
 
 `EcrConfig.AutoInquireOnFailure` triggers `InquireByReferenceAsync()` on
-[EcrTerminal](api-reference.md#ecrterminal) only. Web Service failures always
-need manual reconciliation or inquiry by receipt number.
+[EcrTerminal](api-reference.md#ecrterminal) only. On Web Service, resolve unknown
+outcomes yourself with `InquireByReferenceAsync` (preferred after a lost sale) or
+`InquireAsync` when you have the STAN.
 
 ### LAN works but Web Service hash is rejected (or the reverse)
 

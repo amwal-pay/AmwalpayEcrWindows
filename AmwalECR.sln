@@ -11,6 +11,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{A9880FF9
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AmwalPay.Ecr.Tests", "tests\AmwalPay.Ecr.Tests\AmwalPay.Ecr.Tests.csproj", "{0F9AC40F-08F7-48C7-865E-48280A0AEB77}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{B3E8C1A0-5F2D-4A91-9C3E-7D1F0A2B4C5D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AmwalPay.Ecr.Simulator", "samples\AmwalPay.Ecr.Simulator\AmwalPay.Ecr.Simulator.csproj", "{E7A91C2B-4D5E-4F60-8A1B-2C3D4E5F6071}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -28,9 +32,14 @@ Global
 		{0F9AC40F-08F7-48C7-865E-48280A0AEB77}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0F9AC40F-08F7-48C7-865E-48280A0AEB77}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0F9AC40F-08F7-48C7-865E-48280A0AEB77}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E7A91C2B-4D5E-4F60-8A1B-2C3D4E5F6071}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E7A91C2B-4D5E-4F60-8A1B-2C3D4E5F6071}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E7A91C2B-4D5E-4F60-8A1B-2C3D4E5F6071}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E7A91C2B-4D5E-4F60-8A1B-2C3D4E5F6071}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{66B2D492-E3BA-4313-BE03-094CE939BD28} = {4D75A44B-91B9-42DE-8A3C-A0DF1438D1DA}
 		{0F9AC40F-08F7-48C7-865E-48280A0AEB77} = {A9880FF9-7137-4A8D-A8D3-A85576316BA4}
+		{E7A91C2B-4D5E-4F60-8A1B-2C3D4E5F6071} = {B3E8C1A0-5F2D-4A91-9C3E-7D1F0A2B4C5D}
 	EndGlobalSection
 EndGlobal

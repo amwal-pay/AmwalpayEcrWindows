@@ -39,7 +39,7 @@
     <Authors>Amwal Pay</Authors>
     <Company>Amwal Pay</Company>
     <Product>Amwal ECR SDK</Product>
-    <Description>Amwal POS terminal ECR SDK for .NET: take payments, voids, refunds and inquiries on an Amwal terminal over the local network (Wi-Fi/LAN) or Web Service ECR. Supports .NET Framework 4.7.2+ and .NET 8+; no card data touches your application.</Description>
+    <Description>Amwal POS terminal ECR SDK for .NET (v1.0.0): sale, void, refund, inquiry by STAN or merchant reference, and LAN receipt fetch. Wi-Fi/LAN TCP or Web Service HTTPS to the Amwal Hub. Targets .NET Framework 4.6.2+ (4.7.2+ recommended) and .NET 8+; no card data touches your application.</Description>
     <PackageTags>amwal;pos;ecr;payments;payment-terminal;point-of-sale;sdk;netstandard</PackageTags>
     <PackageProjectUrl>https://amwal-pay.com</PackageProjectUrl>
     <RepositoryUrl>https://github.com/amwal-pay/AmwalpayEcrWindows</RepositoryUrl>

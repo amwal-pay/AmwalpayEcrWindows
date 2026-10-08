@@ -380,5 +380,61 @@ namespace AmwalPay.Ecr.Tests
 
             Assert.Equal("1.478", transaction.Amount);
         }
+
+        [Fact]
+        public void HubFlatFieldsAreReadWhenNestedDataIsOnlyCorrelation()
+        {
+            // Socket.IO / Hub PDF §7.2 mirrors transaction fields at the top
+            // level and still stamps merchantReference under data when found.
+            var answer = Json(
+                """
+                {
+                  "success": true,
+                  "responseCode": "00",
+                  "message": "Approved",
+                  "data": {
+                    "merchantReference": "A9A14AE818B9",
+                    "terminalSerial": "P653200085189"
+                  },
+                  "merchantReference": "A9A14AE818B9",
+                  "systemTraceNr": "000032",
+                  "status": "Approved",
+                  "amount": "1.234",
+                  "transactionId": "e970c800-93f1-11f1-9485-e7dd858253ff",
+                  "rrn": "7862802964726844904806",
+                  "transactionTypeDisplayName": "Purchase",
+                  "currency": "OMR"
+                }
+                """);
+
+            var found = Assert.IsType<EcrInquiry.Found>(answer.ToInquiry("R", 3));
+            Assert.Equal("000032", found.Transaction.Stan);
+            Assert.Equal("Approved", found.Transaction.Status);
+            Assert.Equal("1.234", found.Transaction.Amount);
+            Assert.Equal("Purchase", found.Transaction.Type);
+        }
+
+        [Fact]
+        public void CorrelationOnlyDataWithoutATransactionRecordIsNotFound()
+        {
+            // Hub not-found still puts the lookup's merchantReference under data
+            // for correlation — that must not read as a found empty transaction.
+            var answer = Json(
+                """
+                {
+                  "success": false,
+                  "responseCode": "25",
+                  "message": "Transaction not found",
+                  "data": {
+                    "merchantReference": "A9A14AE818B9",
+                    "terminalSerial": "P653200085189"
+                  },
+                  "errorList": []
+                }
+                """);
+
+            var inquiry = Assert.IsType<EcrInquiry.NotFound>(answer.ToInquiry("A9A14AE818B9", 3));
+            Assert.Equal("Transaction not found", inquiry.Reason);
+        }
     }
 }

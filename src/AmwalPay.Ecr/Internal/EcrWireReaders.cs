@@ -48,12 +48,20 @@ namespace AmwalPay.Ecr.Internal
         /// <summary>
         /// Reads the terminal's answer to an inquiry. The transaction sits under
         /// <c>data</c>; the outer envelope describes the lookup.
+        /// <para>
+        /// Hub / Socket.IO answers may also mirror the record at the top level
+        /// (PDF flat fields) and still stamp correlation-only keys under
+        /// <c>data</c> when nothing was found — so "found" means transaction
+        /// markers are present, not merely that <c>data</c> is a non-null object.
+        /// </para>
         /// </summary>
         public static EcrInquiry ToInquiry(this JsonObject json, string merchantReference, int minorUnitDigits)
         {
             var envelope = EcrResponseEnvelope.Parse(json);
-            var data = envelope.Data;
-            var resolvedReference = Or(envelope.MerchantReference, merchantReference);
+            var data = InquiryRecord(envelope.Data, json);
+            var resolvedReference = Or(
+                data?.Str("merchantReference") ?? "",
+                Or(envelope.MerchantReference, merchantReference));
 
             // Whether a transaction came back, not whether it succeeded.
             //
@@ -64,8 +72,8 @@ namespace AmwalPay.Ecr.Internal
             // never heard of, and the second of those invites it to charge again.
             //
             // The payload separates them: a lookup that found nothing carries no
-            // data at all, while one that found a declined sale carries the whole
-            // record - status, RRN, amount.
+            // transaction record, while one that found a declined sale carries
+            // the whole record - status, RRN, amount.
             if (data is null)
             {
                 var reason = envelope.DisplayMessage;
@@ -105,6 +113,35 @@ namespace AmwalPay.Ecr.Internal
                     AuthorizedAmount: Or(data.Str("authorizeAmount"), data.Str("amount"))),
                 Raw: EcrJson.Write(json));
         }
+
+        /// <summary>
+        /// Nested <c>data</c> when it names a transaction; otherwise top-level
+        /// Hub flat fields. Correlation-only <c>data</c> (merchantReference /
+        /// terminalSerial) is not a found record.
+        /// </summary>
+        private static JsonObject? InquiryRecord(JsonObject? nested, JsonObject json)
+        {
+            if (HasTransactionRecord(nested)) return nested;
+            var root = EcrResponseEnvelope.Root(json);
+            return HasTransactionRecord(root) ? root : null;
+        }
+
+        private static bool HasTransactionRecord(JsonObject? data)
+        {
+            if (data is null) return false;
+            return NonEmpty(data, "systemTraceNr")
+                || NonEmpty(data, "stan")
+                || NonEmpty(data, "transactionId")
+                || NonEmpty(data, "status")
+                || NonEmpty(data, "rrn")
+                || NonEmpty(data, "authCode")
+                || NonEmpty(data, "amount")
+                || NonEmpty(data, "authorizeAmount")
+                || NonEmpty(data, "transactionType")
+                || NonEmpty(data, "transactionTypeDisplayName");
+        }
+
+        private static bool NonEmpty(JsonObject data, string key) => data.Str(key).Length != 0;
 
         /// <summary>Reads the terminal's answer to a receipt request.</summary>
         public static EcrReceipt ToReceipt(this JsonObject json, string merchantReference)

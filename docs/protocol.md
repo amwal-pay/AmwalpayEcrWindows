@@ -14,28 +14,28 @@ describes **Web Service REST** (`ecrMode` 4).
 **Reference implementation.** The C# sources are the reference for everything
 below:
 
-| Concern | Source |
-|---|---|
-| Framing | [`EcrFrames.cs`](../src/AmwalPay.Ecr/EcrFrames.cs) |
-| Request building (LAN) | [`Internal/EcrMessage.cs`](../src/AmwalPay.Ecr/Internal/EcrMessage.cs) |
-| Codec and JSON reading | [`Internal/EcrMessageCodec.cs`](../src/AmwalPay.Ecr/Internal/EcrMessageCodec.cs), [`Internal/EcrJson.cs`](../src/AmwalPay.Ecr/Internal/EcrJson.cs) |
-| Signing (LAN) | [`Internal/SecureHash.cs`](../src/AmwalPay.Ecr/Internal/SecureHash.cs) |
-| Reading answers | [`Internal/EcrResponseEnvelope.cs`](../src/AmwalPay.Ecr/Internal/EcrResponseEnvelope.cs), [`Internal/EcrWireReaders.cs`](../src/AmwalPay.Ecr/Internal/EcrWireReaders.cs) |
-| Transport, timeouts, failure mapping | [`EcrChannel.cs`](../src/AmwalPay.Ecr/EcrChannel.cs), [`EcrTerminal.cs`](../src/AmwalPay.Ecr/EcrTerminal.cs) |
-| Web Service | [`WebService/`](../src/AmwalPay.Ecr/WebService/) |
+| Concern                              | Source                                                                                                                                                                   |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Framing                              | [`EcrFrames.cs`](../src/AmwalPay.Ecr/EcrFrames.cs)                                                                                                                       |
+| Request building (LAN)               | [`Internal/EcrMessage.cs`](../src/AmwalPay.Ecr/Internal/EcrMessage.cs)                                                                                                   |
+| Codec and JSON reading               | [`Internal/EcrMessageCodec.cs`](../src/AmwalPay.Ecr/Internal/EcrMessageCodec.cs), [`Internal/EcrJson.cs`](../src/AmwalPay.Ecr/Internal/EcrJson.cs)                       |
+| Signing (LAN)                        | [`Internal/SecureHash.cs`](../src/AmwalPay.Ecr/Internal/SecureHash.cs)                                                                                                   |
+| Reading answers                      | [`Internal/EcrResponseEnvelope.cs`](../src/AmwalPay.Ecr/Internal/EcrResponseEnvelope.cs), [`Internal/EcrWireReaders.cs`](../src/AmwalPay.Ecr/Internal/EcrWireReaders.cs) |
+| Transport, timeouts, failure mapping | [`EcrChannel.cs`](../src/AmwalPay.Ecr/EcrChannel.cs), [`EcrTerminal.cs`](../src/AmwalPay.Ecr/EcrTerminal.cs)                                                             |
+| Web Service                          | [`WebService/`](../src/AmwalPay.Ecr/WebService/)                                                                                                                         |
 
 ---
 
 ## 1. Transport
 
-| | |
-|---|---|
-| Transport | TCP over the local network |
-| Default port | `9100` |
-| Encoding | UTF-8 JSON |
-| Framing | 2-byte big-endian unsigned length header, then that many bytes |
-| Connections | One request and one response per connection, then close |
-| Concurrency | The terminal serves one transaction at a time |
+|              |                                                                |
+| ------------ | -------------------------------------------------------------- |
+| Transport    | TCP over the local network                                     |
+| Default port | `9100`                                                         |
+| Encoding     | UTF-8 JSON                                                     |
+| Framing      | 2-byte big-endian unsigned length header, then that many bytes |
+| Connections  | One request and one response per connection, then close        |
+| Concurrency  | The terminal serves one transaction at a time                  |
 
 TCP is a byte stream and carries no message boundaries, so the length header is
 what tells the reader where a message ends. A message is at most 65 535 bytes.
@@ -67,10 +67,10 @@ happens quickly or the address is wrong.
 
 A terminal does not listen on port 9100 by default. Its TMS profile decides:
 
-| `terminalMode` | Meaning | `ecrMode` |
-|---|---|---|
-| `1` | ECR-attached — the terminal serves a till | `1` USB cable, `2` Wi-Fi, `3` Bluetooth, `4` WebService |
-| `2` | Standalone — worked by hand at its own screen | `null` |
+| `terminalMode` | Meaning                                       | `ecrMode`                                               |
+| -------------- | --------------------------------------------- | ------------------------------------------------------- |
+| `1`            | ECR-attached — the terminal serves a till     | `1` USB cable, `2` Wi-Fi, `3` Bluetooth, `4` WebService |
+| `2`            | Standalone — worked by hand at its own screen | `null`                                                  |
 
 **The TCP listener opens only for `ecrMode` 2 (Wi-Fi)**, the one IP transport.
 On Bluetooth the port stays closed. On Web Service (`ecrMode: 4`) the terminal
@@ -115,22 +115,22 @@ meaning the operation uses it.
 }
 ```
 
-| Field | Always | Description |
-|---|---|---|
-| `version` | ✔ | Protocol version. `1` today. Bumped only for a change older terminals cannot read |
-| `messageType` | ✔ | `SALE`, `VOID`, `REFUND`, `INQUIRY`, `RECEIPT` |
-| `merchantReference` | ✔ | The till's own reference for this request, echoed in the response. See [Merchant reference](#merchant-reference) |
-| `terminalSerial` | ✔ | The terminal being addressed, as registered on the till |
-| `currencyCode` | ✔ | ISO 4217 numeric. `512` is OMR |
-| `transactionDateTime` | ✔ | `yyyyMMddHHmmss`, the till's clock |
-| `ecrId` | ✔ | Identifies this till on the terminal's records |
-| `amount` | Sale, refund | 12 digits, zero-padded, **minor units** |
-| `stan` | Void, refund, inquiry, receipt | 6 digits, zero-padded. The receipt number of the original |
-| `originalTerminalId` | Optional | The terminal the original was taken on, when not this one |
-| `originalTransactionDate` | Refund, inquiry, receipt | `yyyyMMdd`. A receipt number is only unique within a terminal's day |
-| `originalMerchantReference` | Inquiry by reference | The `merchantReference` the earlier transaction was sent with. Sent **instead of** `stan`, and only on `INQUIRY`; the date is then optional |
-| `nonce` | When signed | 32 hex characters, used once. See [Signing](#signing) |
-| `secureHash` | When signed | HMAC-SHA256 over the rest of the message |
+| Field                       | Always                         | Description                                                                                                                                 |
+| --------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version`                   | ✔                              | Protocol version. `1` today. Bumped only for a change older terminals cannot read                                                           |
+| `messageType`               | ✔                              | `SALE`, `VOID`, `REFUND`, `INQUIRY`, `RECEIPT`                                                                                              |
+| `merchantReference`         | ✔                              | The till's own reference for this request, echoed in the response. See [Merchant reference](#merchant-reference)                            |
+| `terminalSerial`            | ✔                              | The terminal being addressed, as registered on the till                                                                                     |
+| `currencyCode`              | ✔                              | ISO 4217 numeric. `512` is OMR                                                                                                              |
+| `transactionDateTime`       | ✔                              | `yyyyMMddHHmmss`, the till's clock                                                                                                          |
+| `ecrId`                     | ✔                              | Identifies this till on the terminal's records                                                                                              |
+| `amount`                    | Sale, refund                   | 12 digits, zero-padded, **minor units**                                                                                                     |
+| `stan`                      | Void, refund, inquiry, receipt | 6 digits, zero-padded. The receipt number of the original                                                                                   |
+| `originalTerminalId`        | Optional                       | The terminal the original was taken on, when not this one                                                                                   |
+| `originalTransactionDate`   | Refund, inquiry, receipt       | `yyyyMMdd`. A receipt number is only unique within a terminal's day                                                                         |
+| `originalMerchantReference` | Inquiry by reference           | The `merchantReference` the earlier transaction was sent with. Sent **instead of** `stan`, and only on `INQUIRY`; the date is then optional |
+| `nonce`                     | When signed                    | 32 hex characters, used once. See [Signing](#signing)                                                                                       |
+| `secureHash`                | When signed                    | HMAC-SHA256 over the rest of the message                                                                                                    |
 
 ### Signing
 
@@ -252,10 +252,10 @@ there is no mapping table to keep. A till with nothing to link to leaves it
 blank, and the SDK generates 12 uppercase hex characters and reports them back on
 the result.
 
-| | |
-|---|---|
-| Length | 1–32 characters |
-| Characters | Printable ASCII, no spaces, and not `&` or `=` |
+|            |                                                                                        |
+| ---------- | -------------------------------------------------------------------------------------- |
+| Length     | 1–32 characters                                                                        |
+| Characters | Printable ASCII, no spaces, and not `&` or `=`                                         |
 | Uniqueness | The till's business, not the terminal's. The terminal carries it and does not check it |
 
 `&` and `=` are excluded because a signed message builds its input as
@@ -273,11 +273,11 @@ messages hash alike.
 Amounts travel as a whole number of the currency's smallest unit, zero-padded to
 12 digits — ISO 8583 field 4. The decimal point is implied by the currency:
 
-| Currency | Minor unit digits | 1.234 goes out as |
-|---|---|---|
-| OMR — 1 rial = 1000 baisa | 3 | `000000001234` |
-| USD — 1 dollar = 100 cents | 2 | `000000000123` (for 1.23) |
-| JPY — no subdivision | 0 | `000000000001` (for 1) |
+| Currency                   | Minor unit digits | 1.234 goes out as         |
+| -------------------------- | ----------------- | ------------------------- |
+| OMR — 1 rial = 1000 baisa  | 3                 | `000000001234`            |
+| USD — 1 dollar = 100 cents | 2                 | `000000000123` (for 1.23) |
+| JPY — no subdivision       | 0                 | `000000000001` (for 1)    |
 
 Nothing cross-checks the digits against `currencyCode`. Getting it wrong sends
 every amount off by a factor of ten and neither side will object.
@@ -302,28 +302,28 @@ digits. An operator types `215`; the wire carries `000215`.
   "rrn": "622113155340",
   "authCode": "517842",
   "maskedPan": "543173xxxx5785",
-  "ecrResponse": { }
+  "ecrResponse": {}
 }
 ```
 
-| Field | Description |
-|---|---|
-| `approved` | **Authoritative.** Whether money moved |
-| `responseCode` | The backend's own code, or one the terminal generated. See §6 |
-| `responseMessage` | The backend's error list where it gave one, otherwise its message |
+| Field               | Description                                                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------- |
+| `approved`          | **Authoritative.** Whether money moved                                                            |
+| `responseCode`      | The backend's own code, or one the terminal generated. See §6                                     |
+| `responseMessage`   | The backend's error list where it gave one, otherwise its message                                 |
 | `merchantReference` | Echoed from the request untouched. Also sent as `requestId` for ECRs built against the older name |
-| `amount` | What was actually **settled**, in minor units |
-| `rrn` | Retrieval reference number |
-| `authCode` | Authorisation code. Absent on a void — see below |
-| `maskedPan` | Masked card number. Never the full number |
-| `partialApproval` | Present and `true` only when the bank authorised less than asked |
-| `requestedAmount` | What was asked for. Present only with `partialApproval` |
-| `ecrResponse` | The backend's answer verbatim — everything above is a convenience reading of it |
+| `amount`            | What was actually **settled**, in minor units                                                     |
+| `rrn`               | Retrieval reference number                                                                        |
+| `authCode`          | Authorisation code. Absent on a void — see below                                                  |
+| `maskedPan`         | Masked card number. Never the full number                                                         |
+| `partialApproval`   | Present and `true` only when the bank authorised less than asked                                  |
+| `requestedAmount`   | What was asked for. Present only with `partialApproval`                                           |
+| `ecrResponse`       | The backend's answer verbatim — everything above is a convenience reading of it                   |
 
 ### Read `approved`, never `responseCode`
 
 A partial approval that the operator then voids comes back carrying the bank's
-own `00`, because the bank *did* approve before the void undid it. A client that
+own `00`, because the bank _did_ approve before the void undid it. A client that
 decides from the code alone will book that as a sale.
 
 ```
@@ -572,7 +572,7 @@ till finds out instead of retrying and risking a second charge.
 
 Four things to note:
 
-- **`approved: true` means *found*, not *paid*.** What became of the transaction
+- **`approved: true` means _found_, not _paid_.** What became of the transaction
   is `data.status`. An inquiry that finds a declined sale succeeded.
 - **The field names are a sale's.** An inquiry answers with `systemTraceNr`,
   `cardMask` and `currencyId` — the same names a sale answers with — so a till
@@ -584,6 +584,14 @@ Four things to note:
   own record. The outer `amount` is the wire's minor-unit encoding.
 - **`canVoid` / `canRefund`** have already had the void window and the backend's
   rules applied, so a till can enable its buttons from them rather than guessing.
+
+**Web Service / Hub answers.** Hub and Socket.IO results may mirror transaction
+fields at the top level as well as (or instead of) nested `data`. A lookup that
+found nothing may still carry correlation keys under `data`
+(`merchantReference`, `terminalSerial`) with no transaction markers — that is
+*not found*, not an empty found record. Clients (including this SDK) treat a
+response as found only when markers such as `systemTraceNr` / `stan`,
+`transactionId`, `status`, `rrn`, or `amount` are present.
 
 **Response — not found**
 
@@ -660,16 +668,16 @@ says. A receipt with no URL is not a receipt.
 The terminal answers some requests itself, before anything reaches the backend —
 so for these, **no money moved**:
 
-| Code | Meaning | Money moved |
-|---|---|---|
-| `12` | Unsupported message type, or one this terminal cannot perform | No |
-| `13` | The amount is not valid | No |
-| `17` | Cancelled at the terminal | No |
-| `25` | The original transaction was not found | No |
-| `63` | Unsigned, signed with the wrong key, or the clock is too far out | No |
-| `91` | The transaction did not complete, or the terminal could not say | **Unknown** |
-| `94` | Already answered — this nonce has been used | **Ask** |
-| `96` | A transaction is already running on this terminal | No |
+| Code | Meaning                                                          | Money moved |
+| ---- | ---------------------------------------------------------------- | ----------- |
+| `12` | Unsupported message type, or one this terminal cannot perform    | No          |
+| `13` | The amount is not valid                                          | No          |
+| `17` | Cancelled at the terminal                                        | No          |
+| `25` | The original transaction was not found                           | No          |
+| `63` | Unsigned, signed with the wrong key, or the clock is too far out | No          |
+| `91` | The transaction did not complete, or the terminal could not say  | **Unknown** |
+| `94` | Already answered — this nonce has been used                      | **Ask**     |
+| `96` | A transaction is already running on this terminal                | No          |
 
 `63` means nothing was attempted, so there is nothing to reconcile. Seeing it
 repeatedly almost always means the key on the till and the key on the terminal
@@ -708,15 +716,15 @@ busy.
 
 **Which failures are which.** Only one of them is safe:
 
-| What happened | Outcome | SDK failure |
-|---|---|---|
-| The TCP connect was refused, had no route, or timed out — **before** any byte was written | Nothing happened | `Unreachable` |
-| The request was written and no answer arrived within the read timeout | **Unknown** | `Timeout` |
-| The connection was reset, aborted or closed after the request was written, or part way through the answer | **Unknown** | `ConnectionLost` |
-| An answer arrived that was empty or not JSON | **Unknown** | `Malformed` |
-| An answer arrived unsigned, signed with the wrong key, or echoing another request's nonce | **Unknown** | `Unauthenticated` |
+| What happened                                                                                             | Outcome          | SDK failure       |
+| --------------------------------------------------------------------------------------------------------- | ---------------- | ----------------- |
+| The TCP connect was refused, had no route, or timed out — **before** any byte was written                 | Nothing happened | `Unreachable`     |
+| The request was written and no answer arrived within the read timeout                                     | **Unknown**      | `Timeout`         |
+| The connection was reset, aborted or closed after the request was written, or part way through the answer | **Unknown**      | `ConnectionLost`  |
+| An answer arrived that was empty or not JSON                                                              | **Unknown**      | `Malformed`       |
+| An answer arrived unsigned, signed with the wrong key, or echoing another request's nonce                 | **Unknown**      | `Unauthenticated` |
 
-A connect timeout is *not* a read timeout: no request was sent, so there is nothing
+A connect timeout is _not_ a read timeout: no request was sent, so there is nothing
 to reconcile and no inquiry to make.
 
 ---
@@ -753,44 +761,46 @@ When TMS sets `ecrMode: 4`, the till does not open TCP to the terminal. It posts
 JSON to the Amwal Hub over HTTPS. The C# SDK resolves the base URL from
 `EcrEnvironment` and uses fixed path suffixes:
 
-| Environment | Hub base |
-|---|---|
-| SIT | `https://test.amwalpg.com:25452` |
-| UAT | `https://test.amwalpg.com:15452` |
-| PROD | `https://pos.amwalpg.com` |
+| Environment | Hub base                         |
+| ----------- | -------------------------------- |
+| SIT         | `https://test.amwalpg.com:25452` |
+| UAT         | `https://test.amwalpg.com:15452` |
+| PROD        | `https://pos.amwalpg.com`        |
 
-| Operation | Path |
-|---|---|
-| Sale | `/Ecr/Sale` |
-| Void | `/Ecr/Void` |
-| Refund | `/Ecr/Refund` |
-| Transaction status (inquiry) | `/Ecr/TransactionStatus` |
+| Operation                    | Path           |
+| ---------------------------- | -------------- |
+| Sale                         | `/Ecr/Sale`    |
+| Void                         | `/Ecr/Void`    |
+| Refund                       | `/Ecr/Refund`  |
+| Transaction status (inquiry) | `/Ecr/Inquiry` |
 
-Each request is a JSON object. The SDK currently sends these fields (see
-[`WebService/EcrWebServiceMessage.cs`](../src/AmwalPay.Ecr/WebService/EcrWebServiceMessage.cs)):
+Each request is a JSON object matching the Hub contract for that path, plus
+`messageType` / `originalTerminalId` for Hub correlation (see
+[`WebService/EcrWebServiceMessage.cs`](../src/AmwalPay.Ecr/WebService/EcrWebServiceMessage.cs)
+and `WebServiceSecureHashTests`):
 
-| Field | Sale | Void | Refund | Inquiry |
-|---|---|---|---|---|
-| `version` | ✔ | ✔ | ✔ | ✔ |
-| `messageType` | ✔ | ✔ | ✔ | ✔ |
-| `merchantReference` | ✔ | ✔ | ✔ | ✔ |
-| `terminalSerial` | ✔ | ✔ | ✔ | ✔ |
-| `currencyCode` | ✔ | ✔ | ✔ | ✔ |
-| `transactionDateTime` | ✔ (auto) | ✔ | ✔ | ✔ |
-| `requestDateTime` | ✔ (same as above) | ✔ | ✔ | ✔ |
-| `ecrId` | ✔ | ✔ | ✔ | ✔ |
-| `merchantId` | ✔ | ✔ | ✔ | ✔ |
-| `terminalId` | ✔ | ✔ | ✔ | ✔ |
-| `amount` | ✔ | | ✔ | |
-| `stan` | | ✔ | ✔ | ✔ |
-| `originalTransactionDate` | | | ✔ | ✔ |
-| `secureHashValue` | when keyed | when keyed | when keyed | when keyed |
+| Field                       | Sale                                      | Void                      | Refund                    | Inquiry                        |
+| --------------------------- | ----------------------------------------- | ------------------------- | ------------------------- | ------------------------------ |
+| `version`                   | ✔                                         | ✔                         | ✔                         | ✔                              |
+| `messageType`               | ✔                                         | ✔                         | ✔                         | ✔                              |
+| `merchantId`                | ✔                                         | ✔                         | ✔                         | ✔                              |
+| `terminalId`                | ✔                                         | ✔                         | ✔                         | ✔                              |
+| `terminalSerial`            | ✔                                         | ✔                         | ✔                         | ✔                              |
+| `ecrId`                     | ✔                                         | ✔                         | ✔                         | ✔                              |
+| `merchantReference`         | ✔                                         | ✔                         | ✔                         | ✔                              |
+| `currencyCode`              | ✔                                         | ✔                         | ✔                         | ✔                              |
+| `transactionDateTime`       | ✔ (auto)                                  | ✔                         | ✔                         | ✔                              |
+| `requestDateTime`           | ✔ (= `transactionDateTime`; Hub-required) | ✔                         | ✔                         | ✔                              |
+| `amount`                    | ✔ (12-digit padded)                       |                           | ✔ (12-digit padded)       |                                |
+| `stan`                      |                                           | ✔ (6-digit padded)        | ✔ (6-digit padded)        | ✔ (empty when by reference)    |
+| `originalTransactionDate`   |                                           |                           | ✔                         | ✔                              |
+| `originalMerchantReference` |                                           | ✔ (= `merchantReference`) | ✔ (= `merchantReference`) | ✔ when by reference; else `""` |
+| `originalTerminalId`        |                                           | ✔ (= `terminalId`)        | ✔ (= `terminalId`)        | ✔ (= `terminalId`)             |
+| `secureHashValue`           | when keyed                                | when keyed                | when keyed                | when keyed                     |
 
 **Not sent by the SDK on Web Service today** (but used on LAN TCP):
 
-- `originalTerminalId` — cross-till void/refund/inquiry
-- `originalMerchantReference` — inquiry by merchant reference
-- `nonce` — LAN replay protection only
+- `nonce`, `systemTraceNr`
 
 There is no Web Service `RECEIPT` operation in this SDK version.
 
@@ -801,8 +811,12 @@ empty body, a body that is not JSON, or a non-2xx status with nothing readable, 
 synthesises a Hub-shaped envelope and reads it like any other answer:
 
 ```json
-{ "success": false, "responseCode": "NO_RESPONSE", "message": "Timed out after 2m 10s",
-  "nextStep": "INQUIRE_BY_MERCHANT_REFERENCE" }
+{
+  "success": false,
+  "responseCode": "NO_RESPONSE",
+  "message": "Timed out after 2m 10s",
+  "nextStep": "INQUIRE_BY_MERCHANT_REFERENCE"
+}
 ```
 
 `responseCode` is `NO_RESPONSE` for a timeout, no network or a broken connection,
@@ -814,7 +828,7 @@ the same way **without** `nextStep`. Because `success` is `false`, the SDK retur
 the envelope as a decline (`EcrResult.Declined`, with `NextStep` read from
 `nextStep`); for a transaction-status request that carries `nextStep` and no `data`
 it returns a failed lookup (`EcrInquiry.Failed`, `Failure.ConnectionLost`) rather
-than *not found*. **A synthesised envelope with `nextStep` is an unknown outcome,
+than _not found_. **A synthesised envelope with `nextStep` is an unknown outcome,
 not a refusal.** A client implementing this protocol should key on `nextStep`, and
 treat `NO_RESPONSE` as the common instance: "ask before retrying". The whole request
 has one deadline of `ConnectTimeout + ResponseTimeout` (130 seconds by default).
@@ -843,7 +857,7 @@ functions in [§3](#what-is-signed), with `secureHashValue` as the excluded fiel
 
 ```javascript
 function calcHash(obj, secret) {
-  const crypted = CryptoJS.HmacSHA256(obj, CryptoJS.enc.Hex.parse(secret))
+  const crypted = CryptoJS.HmacSHA256(obj, CryptoJS.enc.Hex.parse(secret));
   return CryptoJS.enc.Hex.stringify(crypted).toUpperCase();
 }
 ```
@@ -858,11 +872,11 @@ types as LAN ECR. It does not verify a response signature on this transport.
 
 ### What the integrator configures
 
-| Setting | Owner |
-|---|---|
-| `merchantId`, `terminalId` | App (from terminal registration) |
-| Web Service secure hash key | App (from Amwal) |
-| `EcrEnvironment` | App |
-| Hub hostname, port, paths | SDK (internal) |
+| Setting                     | Owner                            |
+| --------------------------- | -------------------------------- |
+| `merchantId`, `terminalId`  | App (from terminal registration) |
+| Web Service secure hash key | App (from Amwal)                 |
+| `EcrEnvironment`            | App                              |
+| Hub hostname, port, paths   | SDK (internal)                   |
 
 See the [integration guide](integration-guide.md#4-web-service-ecr) for C# usage.

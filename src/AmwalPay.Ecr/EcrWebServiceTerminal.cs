@@ -120,16 +120,43 @@ namespace AmwalPay.Ecr
             return response.ToInquiry(reference, _config.MinorUnitDigits);
         }
 
-        public Task<EcrInquiry> InquireByReferenceAsync(
+        public async Task<EcrInquiry> InquireByReferenceAsync(
             string originalReference,
             string transactionDate,
             string merchantReference = "",
-            CancellationToken cancellationToken = default) =>
-            InquireAsync(
-                receiptNumber: "",
-                transactionDate: transactionDate,
-                merchantReference: merchantReference.Length != 0 ? merchantReference : originalReference,
-                cancellationToken: cancellationToken);
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(originalReference))
+            {
+                throw new ArgumentException(
+                    "An inquiry by reference needs the original's reference",
+                    nameof(originalReference));
+            }
+            var ids = BackendIds();
+            if (ids == null)
+            {
+                return new EcrInquiry.Failed(
+                    merchantReference,
+                    new Failure.Malformed("merchantId and terminalId are required for Web Service ECR"));
+            }
+            var (reference, body) = BuildRequest(
+                EcrTransactionType.Inquiry,
+                ids.Value,
+                merchantReference,
+                stan: "",
+                originalTransactionDate: transactionDate,
+                originalMerchantReference: originalReference);
+            var response = await _api.PostJsonAsync(EcrWebServiceOperation.TransactionStatus, body, cancellationToken).ConfigureAwait(false);
+
+            if (response.Str("nextStep") == HttpEcrWebServiceApi.UnknownOutcomeStep && response["data"] is null)
+            {
+                var reason = response.Str("message");
+                return new EcrInquiry.Failed(
+                    reference,
+                    new Failure.ConnectionLost(reason.Length != 0 ? reason : "The Web Service did not answer"));
+            }
+            return response.ToInquiry(reference, _config.MinorUnitDigits);
+        }
 
         private (string Reference, JsonObject Body) BuildRequest(
             EcrTransactionType type,
@@ -137,7 +164,8 @@ namespace AmwalPay.Ecr
             string merchantReference = "",
             long? amountMinorUnits = null,
             string stan = "",
-            string originalTransactionDate = "")
+            string originalTransactionDate = "",
+            string originalMerchantReference = "")
         {
             var built = EcrWebServiceMessage.Build(
                 type: type,
@@ -148,6 +176,7 @@ namespace AmwalPay.Ecr
                 amountMinorUnits: amountMinorUnits,
                 stan: stan,
                 originalTransactionDate: originalTransactionDate,
+                originalMerchantReference: originalMerchantReference,
                 merchantReference: merchantReference,
                 currencyCode: _config.CurrencyCode,
                 ecrId: _config.EcrId);

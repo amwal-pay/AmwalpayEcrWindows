@@ -50,16 +50,21 @@ namespace AmwalPay.Ecr.WebService
         string TransactionDateTime = "") : IEcrWebServiceRequest;
 
     /// <param name="OriginalTransactionDate">Original transaction date as <c>yyyyMMdd</c>.</param>
+    /// <param name="OriginalMerchantReference">
+    /// When set (and <paramref name="Stan"/> is empty), inquiry looks up by this
+    /// reference rather than by receipt number.
+    /// </param>
     public sealed record EcrWebServiceTransactionStatusRequest(
         long MerchantId,
         long TerminalId,
         string TerminalSerial,
-        string Stan,
-        string OriginalTransactionDate,
+        string Stan = "",
+        string OriginalTransactionDate = "",
         string MerchantReference = "",
         string CurrencyCode = "512",
         string EcrId = "ECR01",
-        string TransactionDateTime = "") : IEcrWebServiceRequest;
+        string TransactionDateTime = "",
+        string OriginalMerchantReference = "") : IEcrWebServiceRequest;
 
     /// <summary>Builds and signs JSON bodies for Ecr Web Service endpoints.</summary>
     public static class EcrWebServiceRequestJson
@@ -75,8 +80,7 @@ namespace AmwalPay.Ecr.WebService
                 ecrId: request.EcrId,
                 amountMinorUnits: request.AmountMinorUnits,
                 merchantReference: request.MerchantReference,
-                transactionDateTime: request.TransactionDateTime,
-                requestDateTime: request.TransactionDateTime).Json;
+                transactionDateTime: request.TransactionDateTime).Json;
 
         public static JsonObject Void(EcrWebServiceVoidRequest request, string secureHashKey = "") =>
             EcrWebServiceMessage.Build(
@@ -89,8 +93,7 @@ namespace AmwalPay.Ecr.WebService
                 ecrId: request.EcrId,
                 stan: request.Stan,
                 merchantReference: request.MerchantReference,
-                transactionDateTime: request.TransactionDateTime,
-                requestDateTime: request.TransactionDateTime).Json;
+                transactionDateTime: request.TransactionDateTime).Json;
 
         public static JsonObject Refund(EcrWebServiceRefundRequest request, string secureHashKey = "") =>
             EcrWebServiceMessage.Build(
@@ -105,8 +108,7 @@ namespace AmwalPay.Ecr.WebService
                 stan: request.Stan,
                 originalTransactionDate: request.OriginalTransactionDate,
                 merchantReference: request.MerchantReference,
-                transactionDateTime: request.TransactionDateTime,
-                requestDateTime: request.TransactionDateTime).Json;
+                transactionDateTime: request.TransactionDateTime).Json;
 
         public static JsonObject TransactionStatus(EcrWebServiceTransactionStatusRequest request, string secureHashKey = "") =>
             EcrWebServiceMessage.Build(
@@ -119,9 +121,9 @@ namespace AmwalPay.Ecr.WebService
                 ecrId: request.EcrId,
                 stan: request.Stan,
                 originalTransactionDate: request.OriginalTransactionDate,
+                originalMerchantReference: request.OriginalMerchantReference,
                 merchantReference: request.MerchantReference,
-                transactionDateTime: request.TransactionDateTime,
-                requestDateTime: request.TransactionDateTime).Json;
+                transactionDateTime: request.TransactionDateTime).Json;
 
         /// <inheritdoc cref="TransactionStatus"/>
         public static JsonObject Inquiry(EcrWebServiceTransactionStatusRequest request, string secureHashKey = "") =>

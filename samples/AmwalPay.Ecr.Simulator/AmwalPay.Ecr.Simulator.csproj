@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>AmwalPay.Ecr.Simulator</RootNamespace>
+    <AssemblyName>AmwalPay.Ecr.Simulator</AssemblyName>
+    <LangVersion>12.0</LangVersion>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <!-- Prefer WinForms when the Windows Desktop SDK is present (Windows installs). -->
+  <PropertyGroup Condition="Exists('$(MSBuildSDKsPath)/Microsoft.NET.Sdk.WindowsDesktop/targets/Microsoft.NET.Sdk.WindowsDesktop.targets')">
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <DefineConstants>$(DefineConstants);AMWAL_ECR_WINFORMS</DefineConstants>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <!-- Fallback: interactive console — Homebrew / Linux SDKs lack WindowsDesktop. -->
+  <PropertyGroup Condition="!Exists('$(MSBuildSDKsPath)/Microsoft.NET.Sdk.WindowsDesktop/targets/Microsoft.NET.Sdk.WindowsDesktop.targets')">
+    <TargetFramework>net8.0</TargetFramework>
+    <DefineConstants>$(DefineConstants);AMWAL_ECR_CONSOLE</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(UseWindowsForms)' != 'true'">
+    <Compile Remove="Ui\MainForm.cs" />
+    <Compile Remove="Ui\TerminalEditForm.cs" />
+    <Compile Remove="Ui\ResultForm.cs" />
+    <None Include="app.manifest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AmwalPay.Ecr\AmwalPay.Ecr.csproj" />
+  </ItemGroup>
+
+</Project>

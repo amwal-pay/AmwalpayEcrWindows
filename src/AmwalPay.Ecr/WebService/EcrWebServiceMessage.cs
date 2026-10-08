@@ -6,9 +6,13 @@ using AmwalPay.Ecr.Internal;
 namespace AmwalPay.Ecr.WebService
 {
     /// <summary>
-    /// Web Service ECR wire payload — fixed field set per operation, signed with
-    /// <see cref="WebServiceSecureHash"/>. Wi‑Fi/LAN uses
+    /// Web Service ECR wire payload — Hub contract field set per operation, signed
+    /// with <see cref="WebServiceSecureHash"/> (HMAC over the JSON body). Wi‑Fi/LAN uses
     /// <see cref="SecureHash.Compose"/> instead; do not mix the two.
+    /// <para>
+    /// Hub path selects the operation; the body also carries <c>messageType</c> for
+    /// parity with LAN / Hub correlation.
+    /// </para>
     /// </summary>
     internal static class EcrWebServiceMessage
     {
@@ -23,9 +27,10 @@ namespace AmwalPay.Ecr.WebService
             long? amountMinorUnits = null,
             string stan = "",
             string originalTransactionDate = "",
+            // Set for inquiry-by-reference; ignored for stan-based inquiry.
+            string originalMerchantReference = "",
             string merchantReference = "",
-            string transactionDateTime = "",
-            string requestDateTime = "")
+            string transactionDateTime = "")
         {
             var reference = EcrMessage.ResolveMerchantReference(merchantReference);
             var wireDateTime = transactionDateTime.Length != 0 ? transactionDateTime : Timestamp();
@@ -33,12 +38,16 @@ namespace AmwalPay.Ecr.WebService
             {
                 ["version"] = EcrMessage.ProtocolVersion,
                 ["messageType"] = type.MessageType(),
-                ["merchantReference"] = reference,
+                ["merchantId"] = merchantId,
+                ["terminalId"] = terminalId,
                 ["terminalSerial"] = terminalSerial,
+                ["ecrId"] = ecrId,
+                ["merchantReference"] = reference,
                 ["currencyCode"] = currencyCode,
                 ["transactionDateTime"] = wireDateTime,
-                ["requestDateTime"] = requestDateTime.Length != 0 ? requestDateTime : wireDateTime,
-                ["ecrId"] = ecrId,
+                // Hub validates this separately from transactionDateTime
+                // (`RequestDateTimeIsRequired` when omitted).
+                ["requestDateTime"] = wireDateTime,
             };
 
             switch (type)
@@ -48,22 +57,35 @@ namespace AmwalPay.Ecr.WebService
                     break;
                 case EcrTransactionType.Void:
                     body["stan"] = EcrMessage.PaddedStan(stan);
+                    body["originalMerchantReference"] = reference;
+                    body["originalTerminalId"] = terminalId;
                     break;
                 case EcrTransactionType.Refund:
                     body["amount"] = Padded(amountMinorUnits);
                     body["stan"] = EcrMessage.PaddedStan(stan);
                     body["originalTransactionDate"] = originalTransactionDate;
+                    body["originalMerchantReference"] = reference;
+                    body["originalTerminalId"] = terminalId;
                     break;
                 case EcrTransactionType.Inquiry:
-                    body["stan"] = EcrMessage.PaddedStan(stan);
+                {
+                    var invoiceStan = EcrMessage.PaddedStan(stan);
+                    var byStan = invoiceStan.Length != 0;
+                    var byReference = !byStan && !string.IsNullOrWhiteSpace(originalMerchantReference);
+                    body["stan"] = invoiceStan;
                     body["originalTransactionDate"] = originalTransactionDate;
+                    // By STAN → empty originalMerchantReference; by reference → set it.
+                    body["originalMerchantReference"] = byReference
+                        ? EcrMessage.ResolveMerchantReference(originalMerchantReference)
+                        : "";
+                    body["originalTerminalId"] = terminalId;
                     break;
-                default:
+                }
+                case EcrTransactionType.Receipt:
                     throw new InvalidOperationException("Receipt is not a Web Service operation");
+                default:
+                    throw new InvalidOperationException($"{type} is not a Web Service operation");
             }
-
-            body["merchantId"] = merchantId;
-            body["terminalId"] = terminalId;
 
             var json = secureHashKey.Length == 0 ? body : WebServiceSecureHash.WithHash(body, secureHashKey);
             return (reference, json);

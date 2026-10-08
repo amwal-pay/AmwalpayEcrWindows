@@ -6,6 +6,6 @@ namespace AmwalPay.Ecr.WebService
         public const string Sale = "/Ecr/Sale";
         public const string Void = "/Ecr/Void";
         public const string Refund = "/Ecr/Refund";
-        public const string TransactionStatus = "/Ecr/TransactionStatus";
+        public const string TransactionStatus = "/Ecr/Inquiry";
     }
 }

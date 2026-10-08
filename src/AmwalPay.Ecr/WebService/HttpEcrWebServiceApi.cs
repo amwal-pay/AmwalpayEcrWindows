@@ -82,11 +82,12 @@ namespace AmwalPay.Ecr.WebService
             CancellationToken cancellationToken = default)
         {
             var clock = Stopwatch.StartNew();
-            LogSigning(body);
             var payload = EcrJson.Write(body);
             var url = Routes.FullUrl(operation);
 
+            // Request payload first so operators see what is about to leave.
             WebServiceHttpLog.Request(_logger, operation, url, _config.Environment, payload);
+            LogSigning(body);
 
             // Connect and read budgets are separate in the terminal API; over
             // HttpClient they are one deadline covering both.

@@ -119,7 +119,7 @@ namespace AmwalPay.Ecr.Tests.WebService
                     TransactionDateTime: "20260826115847")));
 
             Assert.Equal(
-                """{"version":1,"messageType":"SALE","merchantReference":"EA5C14BDB0A2","terminalSerial":"QQW","currencyCode":"512","transactionDateTime":"20260826115847","requestDateTime":"20260826115847","ecrId":"ECR01","amount":"000000000111","merchantId":8899,"terminalId":999}""",
+                """{"version":1,"messageType":"SALE","merchantId":8899,"terminalId":999,"terminalSerial":"QQW","ecrId":"ECR01","merchantReference":"EA5C14BDB0A2","currencyCode":"512","transactionDateTime":"20260826115847","requestDateTime":"20260826115847","amount":"000000000111"}""",
                 unsigned);
         }
 
@@ -136,7 +136,7 @@ namespace AmwalPay.Ecr.Tests.WebService
                     TransactionDateTime: "20260826120107")));
 
             Assert.Equal(
-                """{"version":1,"messageType":"VOID","merchantReference":"77619797A075","terminalSerial":"QQW","currencyCode":"512","transactionDateTime":"20260826120107","requestDateTime":"20260826120107","ecrId":"ECR01","stan":"000008","merchantId":8899,"terminalId":999}""",
+                """{"version":1,"messageType":"VOID","merchantId":8899,"terminalId":999,"terminalSerial":"QQW","ecrId":"ECR01","merchantReference":"77619797A075","currencyCode":"512","transactionDateTime":"20260826120107","requestDateTime":"20260826120107","stan":"000008","originalMerchantReference":"77619797A075","originalTerminalId":999}""",
                 unsigned);
         }
 
@@ -155,7 +155,7 @@ namespace AmwalPay.Ecr.Tests.WebService
                     TransactionDateTime: "20260826120556")));
 
             Assert.Equal(
-                """{"version":1,"messageType":"REFUND","merchantReference":"3FD2197EB935","terminalSerial":"QQW","currencyCode":"512","transactionDateTime":"20260826120556","requestDateTime":"20260826120556","ecrId":"ECR01","amount":"000000000022","stan":"000011","originalTransactionDate":"20260826","merchantId":8899,"terminalId":999}""",
+                """{"version":1,"messageType":"REFUND","merchantId":8899,"terminalId":999,"terminalSerial":"QQW","ecrId":"ECR01","merchantReference":"3FD2197EB935","currencyCode":"512","transactionDateTime":"20260826120556","requestDateTime":"20260826120556","amount":"000000000022","stan":"000011","originalTransactionDate":"20260826","originalMerchantReference":"3FD2197EB935","originalTerminalId":999}""",
                 unsigned);
         }
 
@@ -173,7 +173,26 @@ namespace AmwalPay.Ecr.Tests.WebService
                     TransactionDateTime: "20260826120654")));
 
             Assert.Equal(
-                """{"version":1,"messageType":"INQUIRY","merchantReference":"0B574EB48120","terminalSerial":"QQW","currencyCode":"512","transactionDateTime":"20260826120654","requestDateTime":"20260826120654","ecrId":"ECR01","stan":"000013","originalTransactionDate":"20260826","merchantId":8899,"terminalId":999}""",
+                """{"version":1,"messageType":"INQUIRY","merchantId":8899,"terminalId":999,"terminalSerial":"QQW","ecrId":"ECR01","merchantReference":"0B574EB48120","currencyCode":"512","transactionDateTime":"20260826120654","requestDateTime":"20260826120654","stan":"000013","originalTransactionDate":"20260826","originalMerchantReference":"","originalTerminalId":999}""",
+                unsigned);
+        }
+
+        [Fact]
+        public void InquiryByMerchantReferencePayloadMatchesExpectedWireShape()
+        {
+            var unsigned = Wire(EcrWebServiceRequestJson.Inquiry(
+                new EcrWebServiceTransactionStatusRequest(
+                    MerchantId: MerchantId,
+                    TerminalId: TerminalId,
+                    TerminalSerial: TerminalSerial,
+                    Stan: "",
+                    OriginalTransactionDate: "20260826",
+                    MerchantReference: "INQ-NEW-REF01",
+                    OriginalMerchantReference: "ORD-88231ABC",
+                    TransactionDateTime: "20260826120654")));
+
+            Assert.Equal(
+                """{"version":1,"messageType":"INQUIRY","merchantId":8899,"terminalId":999,"terminalSerial":"QQW","ecrId":"ECR01","merchantReference":"INQ-NEW-REF01","currencyCode":"512","transactionDateTime":"20260826120654","requestDateTime":"20260826120654","stan":"","originalTransactionDate":"20260826","originalMerchantReference":"ORD-88231ABC","originalTerminalId":999}""",
                 unsigned);
         }
 

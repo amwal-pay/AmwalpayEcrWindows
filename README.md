@@ -1,5 +1,10 @@
 # Amwal ECR SDK for .NET
 
+> **Version 1.0.0 — first public package.** This is the initial NuGet release of
+> `AmwalPay.Ecr`. Pin an exact version (`Version="[1.0.0]"`), treat wire and API
+> contracts as stable for this major, and read the release notes before any later
+> upgrade. Feedback on first integrations is welcome via your Amwal contact.
+
 Drive an **Amwal POS terminal** from your own Windows or .NET application. Your
 application asks for a payment; the terminal reads the card, talks to the payment
 backend, and answers. **No card data passes through your application** — you
@@ -112,6 +117,20 @@ meaning; read the release notes, the terminal may need updating too.
 
 ---
 
+## What's in 1.0.0
+
+| Area | Included |
+|---|---|
+| Transports | LAN TCP (`ecrMode: 2`); Web Service HTTPS (`ecrMode: 4`); USB cable only if you supply `IEcrChannel` |
+| Operations | Sale, void, refund, inquiry (STAN or merchant reference), receipt URL (LAN / USB only) |
+| Web Service inquiry | POST `/Ecr/Inquiry` with `requestDateTime`, by-STAN or by-`originalMerchantReference` |
+| Outcomes | `Approved` / `Declined` / `Failed`; inquiry `Found` / `NotFound` / `Failed` |
+| Recovery | LAN auto-inquire on lost answer; Web Service: branch on `NextStep.InquireByMerchantReference`, then inquire yourself |
+| Platforms | `netstandard2.0` + `net8.0` — see [Compatibility](docs/compatibility.md) |
+
+**Not in 1.0.0:** a built-in USB driver, Web Service e-receipt, auto-inquire on Web
+Service, Bluetooth ECR, Native AOT / trimming support.
+
 ## Documentation
 
 | | |
@@ -125,6 +144,10 @@ meaning; read the release notes, the terminal may need updating too.
 Working samples, both on .NET 8 (support ends Nov 10, 2026; they should move to .NET 10):
 [Windows-Native-Example](https://github.com/amwal-pay/AmwalpayEcrWindowsExample/tree/main/Windows-Native-Example) (WPF till)
 and [AmwalECR-Web-Example](https://github.com/amwal-pay/AmwalpayEcrWindowsExample/tree/main/AmwalECR-Web-Example) (ASP.NET Core).
+
+**In-repo simulator** (mirrors the Android ECR-simulator): see
+[samples/README.md](samples/README.md). WinForms on Windows Desktop SDK; interactive
+console elsewhere. `dotnet run --project samples/AmwalPay.Ecr.Simulator`.
 
 ---
 
@@ -162,13 +185,14 @@ separate key. `EcrSessions` validates credentials and builds the right client.
 
 ---
 
-## Features
+## Features (1.0.0)
 
 **Five operations.** **Sale** and **Refund** present a card. **Void** cancels an
 earlier transaction in full (the terminal holds the original). **Inquiry** asks
-what became of one, and **Receipt** fetches its e-receipt as a URL for a QR code;
-both only read. Receipt is LAN / USB only; Web Service offers sale, void, refund
-and inquiry by receipt number. See the
+what became of one (by receipt number / STAN, or by merchant reference), and
+**Receipt** fetches its e-receipt as a URL for a QR code; both only read. Receipt
+is LAN / USB only. Web Service offers sale, void, refund, and inquiry (STAN or
+by reference) over HTTPS to the Hub (`/Ecr/Inquiry`). See the
 [support matrix](https://github.com/amwal-pay/AmwalpayEcrWindows/blob/main/docs/integration-guide.md#lan-vs-web-service--what-the-sdk-supports-today).
 
 **Outcomes you cannot misread.** `Approved`, `Declined` and `Failed` are separate
@@ -181,7 +205,9 @@ arrived.
 
 **Inquiry while busy.** The terminal answers a lookup even mid-payment, which is
 what makes an unknown outcome recoverable rather than a guess. On LAN the SDK
-follows a lost answer with that inquiry for you.
+follows a lost answer with an automatic inquiry by merchant reference. On Web
+Service you resolve manually with `InquireByReferenceAsync` (or `InquireAsync`
+when you already have the STAN).
 
 **Probe and plan.** `IsReachableAsync()` and `ProbeReachabilityAsync()` turn a wrong
 address into an immediate answer. `EcrSessions.Plan` validates addressing, IDs and
@@ -306,10 +332,12 @@ taken the money and been unable to say so. Retrying that is how a customer gets
 charged twice. Resolve it with `InquireAsync` / `InquireByReferenceAsync` — which
 the terminal answers even while busy — or reconcile against the terminal.
 
-On **Web Service** a network error arrives as `Declined` (usually
-`ResponseCode == "NO_RESPONSE"`) with **`NextStep == NextStep.InquireByMerchantReference`**.
-That `NextStep` is the reliable signal: an unknown outcome, not a refusal, so
-inquire before retrying. See
+On **Web Service** a network error on a money-moving call arrives as `Declined`
+(usually `ResponseCode == "NO_RESPONSE"`) with
+**`NextStep == NextStep.InquireByMerchantReference`**. That `NextStep` is the
+reliable signal: an unknown outcome, not a refusal — call
+`InquireByReferenceAsync` with the sale's `merchantReference` (or
+`InquireAsync` if you have the STAN) before retrying. See
 [the integration guide](https://github.com/amwal-pay/AmwalpayEcrWindows/blob/main/docs/integration-guide.md#9-when-the-answer-never-comes).
 
 ---

@@ -47,7 +47,7 @@ namespace AmwalPay.Ecr.Tests.WebService
             var sit = new EcrWebServiceRoutes(EcrEnvironment.SIT);
             var prod = new EcrWebServiceRoutes(new EcrConfig { Environment = EcrEnvironment.PROD });
 
-            Assert.Equal("/Ecr/TransactionStatus", sit.Url(EcrTransactionType.Inquiry));
+            Assert.Equal("/Ecr/Inquiry", sit.Url(EcrTransactionType.Inquiry));
             Assert.Equal("/Ecr/Refund", prod.Path(EcrWebServiceOperation.Refund));
             Assert.Equal(
                 EcrEnvironmentUrls.HubSocketUrl(EcrEnvironment.PROD),
@@ -89,7 +89,7 @@ namespace AmwalPay.Ecr.Tests.WebService
             Assert.Equal("https://test.amwalpg.com:15452/Ecr/Void", routes.FullUrl(EcrWebServiceOperation.Void));
             Assert.Equal("https://test.amwalpg.com:15452/Ecr/Refund", routes.FullUrl(EcrWebServiceOperation.Refund));
             Assert.Equal(
-                "https://test.amwalpg.com:15452/Ecr/TransactionStatus",
+                "https://test.amwalpg.com:15452/Ecr/Inquiry",
                 routes.FullUrl(EcrWebServiceOperation.TransactionStatus));
         }
 

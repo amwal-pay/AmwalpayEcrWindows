@@ -4,6 +4,11 @@ From an empty project to a working sale, then everything you need to ship. Each
 step says what to do, what you should see, and what it means when you see
 something else.
 
+> **Package 1.0.0.** This guide matches the first NuGet release of `AmwalPay.Ecr`.
+> Pin `Version="[1.0.0]"`. Web Service inquiry supports lookup by STAN and by
+> merchant reference (`/Ecr/Inquiry`); receipt fetch and auto-inquire after a
+> lost answer remain LAN / USB only.
+
 This guide is for .NET developers — WPF, WinForms, console, Windows Service,
 classic .NET Framework till software, and ASP.NET web apps — integrating an Amwal
 POS terminal into a till or a server. Two working samples, both on .NET 8, live in
@@ -461,19 +466,15 @@ switch (await terminal.InquireAsync(receiptNumber: "215", transactionDate: "2026
 }
 ```
 
-There is no auto-inquiry on Web Service and no way to look a sale up by merchant
-reference (below), so recovery needs the **receipt number** (STAN) — from the
-terminal's screen or receipt, or from the Hub's back office. If you cannot get
-one, reconcile against the terminal's batch. Do not resend the sale.
+There is no **automatic** inquiry on Web Service after a lost sale — you resolve
+it yourself. Prefer **`InquireByReferenceAsync(order.Number)`** with the
+`merchantReference` you stored before the call (date may be blank). If you already
+have the receipt number (STAN), use `InquireAsync(receiptNumber, transactionDate)`.
+If both leave the outcome unknown, reconcile against the terminal's batch. Do not
+resend the sale.
 
 The whole request has one deadline of `ConnectTimeout + ResponseTimeout` (130 s by
 default), not two.
-
-> **Web Service `InquireByReferenceAsync` does not look anything up.** It exists
-> for API symmetry: it sends an ordinary inquiry with an **empty receipt number**
-> and puts your reference on the inquiry's own `merchantReference`; the Hub body
-> carries no `originalMerchantReference`. Do not use it as evidence that a sale
-> did not happen. Inquire by receipt number.
 
 ### LAN vs Web Service — what the SDK supports today
 
@@ -481,9 +482,9 @@ default), not two.
 |---|---|---|
 | Sale / void / refund | Yes | Yes |
 | Inquiry by receipt (STAN + date) | Yes — `InquireAsync` | Yes — `InquireAsync` |
-| Inquiry by merchant reference | Yes — `InquireByReferenceAsync` | **Not wired** — method exists but does not look up by reference (see above) |
+| Inquiry by merchant reference | Yes — `InquireByReferenceAsync` | Yes — sends `originalMerchantReference` (empty `stan`) |
 | Receipt (e-receipt URL) | Yes — `ReceiptAsync` | **No** — no method; `EcrOpenedSession.ReceiptAsync` answers `EcrReceipt.Unavailable` |
-| `originalTerminalId` (other till) | Yes — void/refund/inquiry/receipt | **No** — no parameter on `EcrWebServiceTerminal`; `EcrOpenedSession` accepts it and **silently ignores it** for Web Service |
+| `originalTerminalId` (other till) | Yes — void/refund/inquiry/receipt | Yes on void/refund/inquiry (= request `terminalId`; other-till override not on the public API) |
 | Reachability probe | Yes — `ProbeReachabilityAsync` | No — `EcrOpenedSession.ProbeReachabilityAsync` returns `null` |
 | `RunAsync(type, …)` | Yes | **No** — use `SaleAsync` / `VoidAsync` / `RefundAsync` |
 | Auto-inquire after unknown failure | Yes — `EcrConfig.AutoInquireOnFailure` (default `true`) | **No** |
@@ -800,22 +801,23 @@ window and the backend's rules applied.
 
 Safe to repeat, and answered even while the terminal is taking a payment.
 
-**Inquiry by merchant reference (LAN / USB only).** After a lost sale, you often
-have the `MerchantReference` but not yet a receipt number:
+**Inquiry by merchant reference (LAN, USB, and Web Service).** After a lost sale,
+you often have the `MerchantReference` but not yet a receipt number:
 
 ```csharp
 switch (await terminal.InquireByReferenceAsync(
     originalReference: order.Number,
-    transactionDate: "20260809"))          // optional on LAN; narrows the search
+    transactionDate: ""))                  // optional; yyyyMMdd narrows the day
 {
     case EcrInquiry.Found found:    Reconcile(found.Transaction); break;
     case EcrInquiry.NotFound:       /* nothing was taken; safe to retry the sale */ break;
-    case EcrInquiry.Failed:         Escalate(); break;
+    case EcrInquiry.Failed:         Escalate(); break;   // lookup failed: still unknown
 }
 ```
 
-On Web Service, use `InquireAsync(receiptNumber, transactionDate)` with a STAN —
-see the caveat in [§4](#4-web-service-ecr).
+On Web Service the SDK posts to `/Ecr/Inquiry` with empty `stan` and
+`originalMerchantReference` set (plus Hub-required `requestDateTime`). A blank
+`transactionDate` is valid; supply `yyyyMMdd` when you know the day.
 
 ### Receipt — the e-receipt as a QR code (LAN / USB only)
 
@@ -920,10 +922,10 @@ does not auto-inquire, and its network errors are not `Failed` at all — see
 When you resolve manually:
 
 - **By reference** (after a lost sale where you stored `MerchantReference`) —
-  `InquireByReferenceAsync()` on **LAN / USB** only.
+  `InquireByReferenceAsync()` on either transport.
 - **By receipt number** — `InquireAsync(receiptNumber, transactionDate)` on either
   transport, when you already have the STAN from a partial answer or the terminal
-  display. This is the only route on Web Service.
+  display.
 
 Retrying a sale blind is how a customer gets charged twice. Reconcile against the
 terminal's batch if both routes still leave the outcome unknown.
