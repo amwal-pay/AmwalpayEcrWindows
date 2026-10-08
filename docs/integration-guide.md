@@ -24,16 +24,17 @@ one repository:
 2. [Add the SDK](#2-add-the-sdk)
 3. [Address a terminal](#3-address-a-terminal)
 4. [Web Service ECR](#4-web-service-ecr) — [initialization](#initialization-process), caveat, support matrix
-5. [Your first sale](#5-your-first-sale)
-6. [Handling the three outcomes](#6-handling-the-three-outcomes)
-7. [Partial approval](#7-partial-approval)
-8. [Void, refund, inquiry, receipt](#8-void-refund-inquiry-receipt)
-9. [When the answer never comes](#9-when-the-answer-never-comes)
-10. [Building your own form](#10-building-your-own-form)
-11. [Threading and lifecycle](#11-threading-and-lifecycle)
-12. [Logging](#12-logging)
-13. [Testing without hardware](#13-testing-without-hardware)
-14. [Going to production](#14-going-to-production)
+5. [Full examples — Wi‑Fi and Web Service](#5-full-examples--wifi-and-web-service) — [Wi‑Fi setup](#51-wifi--lan--setup) · [sale](#52-wifi--lan--sale) · [void](#53-wifi--lan--void) · [refund](#54-wifi--lan--refund) · [inquiry](#55-wifi--lan--inquiry-by-receipt-stan) · [by reference](#56-wifi--lan--inquiry-by-merchant-reference) · [receipt](#57-wifi--lan--e-receipt) · [WS setup](#58-web-service--setup) · [sale](#59-web-service--sale) · [void](#510-web-service--void) · [refund](#511-web-service--refund) · [inquiry](#512-web-service--inquiry-by-receipt-stan) · [by reference](#513-web-service--inquiry-by-merchant-reference)
+6. [Your first sale](#6-your-first-sale)
+7. [Handling the three outcomes](#7-handling-the-three-outcomes)
+8. [Partial approval](#8-partial-approval)
+9. [Void, refund, inquiry, receipt](#9-void-refund-inquiry-receipt)
+10. [When the answer never comes](#10-when-the-answer-never-comes)
+11. [Building your own form](#11-building-your-own-form)
+12. [Threading and lifecycle](#12-threading-and-lifecycle)
+13. [Logging](#13-logging)
+14. [Testing without hardware](#14-testing-without-hardware)
+15. [Going to production](#15-going-to-production)
 
 ---
 
@@ -161,7 +162,7 @@ Framework behaviour, **not verified in this repository's test runs** (see
   default versions; an app targeting a version before 4.7 (the 4.6.2 floor
   included) does not and needs
   `ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;` (see
-  [§14](#web-service-on-classic-net-framework)).
+  [§15](#web-service-on-classic-net-framework)).
 
 ---
 
@@ -172,6 +173,23 @@ from **credentials and till settings** ([EcrConfig](api-reference.md#ecrconfig))
 Use [EcrSessions.Plan](api-reference.md#ecrsessions) to validate both before you
 send — it returns issues rather than throwing, so your UI can show what is missing.
 
+### Setup structure (same as the Android ECR-simulator)
+
+Do **not** put a secure hash key on the terminal edit form. The simulator and the
+Windows samples keep credentials in **global settings** and terminals as address
+records only:
+
+1. **Settings** — two mode-specific keys Amwal issued separately (plus SIT/UAT/PROD
+   for Web Service): *Wi‑Fi/LAN secure hash key* and *Web Service secure hash key*.
+2. **Register terminal** — name, serial, mode; Wi‑Fi → IP/port; Web Service →
+   merchant/terminal IDs. No key field.
+3. **Operate** — pick a terminal; the app calls `Plan` with
+   `settings.SecureHashKeyFor(mode)` (one value), then `Open` / `SaleAsync` / ….
+
+Seeing both key fields on the Terminals screen is intentional — they are different
+secrets, not the same key entered twice. The transaction config card shows only
+the key that applies to the selected mode.
+
 ### LAN / Wi‑Fi ECR
 
 ```csharp
@@ -181,8 +199,7 @@ var plan = EcrSessions.Plan(
     {
         SecureHashKey = secrets.LanKeyFor(serialNumber),
         EcrId = "TILL-04",
-    },
-    rawSecureHashKey: secrets.LanKeyFor(serialNumber));
+    });
 
 if (!plan.IsReady)
 {
@@ -201,13 +218,15 @@ is cheap to keep and safe to reuse for the life of your application.
 
 > `EcrConfig` validates as you assign: a `SecureHashKey` with a stray space, a
 > `Port` of 0 or a `MinorUnitDigits` of 7 throws `ArgumentException` on the spot.
-> That is why `Plan` takes the key a second time as `rawSecureHashKey` — pass what
-> the operator typed, and a bad value becomes an entry in `plan.Issues` instead of
-> an exception in your settings screen.
+> When validating **typed** input in a settings UI, pass that string as
+> `rawSecureHashKey` (and put an empty or already-valid key on `EcrConfig`) so a
+> bad value becomes `plan.Issues` instead of an exception. From a validated store,
+> omit `rawSecureHashKey` — it defaults to `config.SecureHashKey`. It is not a
+> second secret.
 
 **A plan is not ready without a key.** `Plan` adds *"Wi-Fi/LAN secure hash key is not
 configured"* (or the Web Service equivalent) whenever the key is empty. See
-[§13](#13-testing-without-hardware) if you need to talk to something that does not
+[§14](#14-testing-without-hardware) if you need to talk to something that does not
 sign.
 
 **Probe before you pay.** `ProbeReachabilityAsync()` opens a TCP handshake and
@@ -404,10 +423,9 @@ var plan = EcrSessions.Plan(
     link: new EcrLink.WebService(MerchantId: "13593", TerminalId: "101311"),
     config: new EcrConfig
     {
-        SecureHashKey = secrets.WebServiceKey,
+        SecureHashKey = secrets.WebServiceKey,   // from settings — not the Wi‑Fi/LAN key
         Environment = EcrEnvironment.UAT,
-    },
-    rawSecureHashKey: secrets.WebServiceKey);   // typed key; Plan sanitizes odd-length / non-hex
+    });
 
 if (!plan.IsReady)
 {
@@ -573,7 +591,417 @@ for the process and uses the machine's default proxy settings; and on classic
 
 ---
 
-## 5. Your first sale
+## 5. Full examples — Wi‑Fi and Web Service
+
+Copy-paste oriented. Each subsection is a complete flow for **one transport**.
+Keys stay in app settings (two different secrets); terminal records hold only
+addresses — same structure as the Android ECR-simulator. Narrative detail for
+outcomes and recovery is in [§7](#7-handling-the-three-outcomes)–[§10](#10-when-the-answer-never-comes).
+
+Shared assumptions in the snippets below:
+
+```csharp
+using System.Diagnostics;
+using System.Globalization;
+using AmwalPay.Ecr;
+
+// From your secret store / settings — never hard-code in production
+string wifiKey = secrets.WifiSecureHashKey;           // Wi‑Fi / USB / Bluetooth
+string webServiceKey = secrets.WebServiceSecureHashKey; // Hub REST only
+```
+
+### 5.1 Wi‑Fi / LAN — setup
+
+TMS: `terminalMode: 1`, `ecrMode: 2`. Till and terminal on the same LAN; terminal
+shows IP:port under the card logos on the idle screen.
+
+```csharp
+EcrTerminal OpenWifiTerminal(
+    string host,
+    string serial,
+    string wifiSecureHashKey,
+    IEcrLogger? logger = null)
+{
+    var plan = EcrSessions.Plan(
+        link: new EcrLink.Lan(Host: host, Port: 9100),
+        config: new EcrConfig
+        {
+            SecureHashKey = wifiSecureHashKey,
+            EcrId = "TILL-04",
+            CurrencyCode = "512",       // OMR
+            MinorUnitDigits = 3,
+            ResponseTimeout = TimeSpan.FromSeconds(120),
+        });
+
+    if (!plan.IsReady)
+        throw new InvalidOperationException(string.Join("\n", plan.Issues));
+
+    return EcrSessions.LanTerminal(serial, plan, logger ?? EcrLogger.From(Debug.WriteLine));
+}
+
+// Usage
+EcrTerminal wifi = OpenWifiTerminal(
+    host: "192.168.1.50",
+    serial: "P653200085189",
+    wifiSecureHashKey: wifiKey);
+```
+
+Optional probe before any money-moving call (LAN only):
+
+```csharp
+if (!await wifi.IsReachableAsync())
+{
+    screen.Show("Terminal not reachable — check power, Wi‑Fi, and firewall (TCP 9100)");
+    return;
+}
+```
+
+### 5.2 Wi‑Fi / LAN — sale
+
+```csharp
+async Task WifiSaleAsync(EcrTerminal wifi, decimal amount, string orderNumber)
+{
+    // Store orderNumber before the call — needed if the answer is lost
+    switch (await wifi.SaleAsync(amount, merchantReference: orderNumber))
+    {
+        case EcrResult.Approved a when a.PartialApproval:
+            var requested = decimal.Parse(a.RequestedAmount, CultureInfo.InvariantCulture);
+            var taken = decimal.Parse(a.Amount, CultureInfo.InvariantCulture);
+            screen.Show($"Only {a.Amount} approved. Collect {requested - taken} another way.");
+            CompleteSale(a);
+            break;
+
+        case EcrResult.Approved a:
+            CompleteSale(a);   // a.Amount, a.Rrn, a.AuthCode, a.MaskedPan
+            break;
+
+        case EcrResult.Declined d when d.NextStep == NextStep.InquireByMerchantReference:
+            HandleUnknownOutcome(orderNumber, d.Reason);   // inquire; do not retry
+            break;
+
+        case EcrResult.Declined d:
+            screen.Show(d.Reason);
+            break;
+
+        case EcrResult.Failed f when f.Settled:
+            Reconcile(((EcrInquiry.Found)f.Recovered!).Transaction);
+            break;
+
+        case EcrResult.Failed f:
+            HandleUnknownOutcome(orderNumber, f.Failure.Message);
+            break;
+    }
+}
+```
+
+### 5.3 Wi‑Fi / LAN — void
+
+```csharp
+async Task WifiVoidAsync(EcrTerminal wifi, string receiptNumber)
+{
+    switch (await wifi.VoidAsync(receiptNumber: receiptNumber))
+    {
+        case EcrResult.Approved a:
+            // Do not print a.AuthCode on a void — it is a placeholder
+            RecordVoid(a.Rrn, a.Amount);
+            break;
+        case EcrResult.Declined d:
+            screen.Show(d.Reason);   // not found, outside void window, already voided, …
+            break;
+        case EcrResult.Failed f:
+            HandleUnknownOutcome(merchantReference: "", f.Failure.Message);
+            break;
+    }
+}
+
+// Original was taken on another till (LAN only)
+await wifi.VoidAsync(receiptNumber: "215", originalTerminalId: "31629");
+```
+
+### 5.4 Wi‑Fi / LAN — refund
+
+```csharp
+async Task WifiRefundAsync(
+    EcrTerminal wifi,
+    decimal amount,
+    string receiptNumber,
+    string transactionDate)   // yyyyMMdd — receipt numbers are unique per day
+{
+    // Cardholder must present the card
+    switch (await wifi.RefundAsync(
+        amount: amount,
+        receiptNumber: receiptNumber,
+        transactionDate: transactionDate))
+    {
+        case EcrResult.Approved a: CompleteRefund(a); break;
+        case EcrResult.Declined d: screen.Show(d.Reason); break;
+        case EcrResult.Failed f:   HandleUnknownOutcome("", f.Failure.Message); break;
+    }
+}
+```
+
+### 5.5 Wi‑Fi / LAN — inquiry by receipt (STAN)
+
+```csharp
+async Task WifiInquireByStanAsync(
+    EcrTerminal wifi,
+    string receiptNumber,
+    string transactionDate)   // yyyyMMdd
+{
+    switch (await wifi.InquireAsync(
+        receiptNumber: receiptNumber,
+        transactionDate: transactionDate))
+    {
+        case EcrInquiry.Found found:
+            var txn = found.Transaction;
+            screen.Show($"{txn.Type} {txn.Status} {txn.Amount} {txn.Currency}");
+            if (txn.CanVoid) EnableVoid();
+            if (txn.CanRefund) EnableRefund();
+            break;
+        case EcrInquiry.NotFound n:
+            screen.Show(n.Reason);
+            break;
+        case EcrInquiry.Failed f:
+            screen.Show(f.Failure.Message);   // lookup failed — still unknown
+            break;
+    }
+}
+```
+
+### 5.6 Wi‑Fi / LAN — inquiry by merchant reference
+
+```csharp
+async Task WifiInquireByReferenceAsync(EcrTerminal wifi, string orderNumber)
+{
+    switch (await wifi.InquireByReferenceAsync(
+        originalReference: orderNumber,
+        transactionDate: ""))   // blank = do not invent a day
+    {
+        case EcrInquiry.Found found:  Reconcile(found.Transaction); break;
+        case EcrInquiry.NotFound:     /* nothing taken — safe to offer a new sale */ break;
+        case EcrInquiry.Failed:       Escalate(); break;
+    }
+}
+```
+
+### 5.7 Wi‑Fi / LAN — e-receipt
+
+```csharp
+async Task WifiReceiptAsync(
+    EcrTerminal wifi,
+    string receiptNumber,
+    string transactionDate)
+{
+    switch (await wifi.ReceiptAsync(
+        receiptNumber: receiptNumber,
+        transactionDate: transactionDate))
+    {
+        case EcrReceipt.Ready ready:         screen.ShowQrCode(ready.Url); break;
+        case EcrReceipt.Unavailable missing: screen.Show(missing.Reason); break;
+        case EcrReceipt.Failed failed:       screen.Show(failed.Failure.Message); break;
+    }
+}
+```
+
+---
+
+### 5.8 Web Service — setup
+
+TMS: `terminalMode: 1`, `ecrMode: 4`. No terminal IP — HTTPS to the Amwal Hub.
+Use the **Web Service** key and numeric merchant/terminal IDs. On .NET Framework
+before 4.7, enable TLS 1.2 once at process start.
+
+```csharp
+EcrWebServiceTerminal OpenWebServiceTerminal(
+    string serial,
+    string merchantId,
+    string terminalId,
+    string webServiceSecureHashKey,
+    EcrEnvironment environment = EcrEnvironment.UAT,
+    IEcrLogger? logger = null)
+{
+    var plan = EcrSessions.Plan(
+        link: new EcrLink.WebService(MerchantId: merchantId, TerminalId: terminalId),
+        config: new EcrConfig
+        {
+            SecureHashKey = webServiceSecureHashKey,   // not the Wi‑Fi key
+            Environment = environment,                 // SIT / UAT / PROD → Hub URL
+            EcrId = "TILL-04",
+            CurrencyCode = "512",
+            MinorUnitDigits = 3,
+        });
+
+    if (!plan.IsReady)
+        throw new InvalidOperationException(string.Join("\n", plan.Issues));
+    // plan.ConnectionSummary → e.g. "UAT · merchant 13593 · terminal 101311"
+
+    return EcrSessions.WebServiceTerminal(
+        serial,
+        plan,
+        logger ?? EcrLogger.From(msg => Debug.WriteLine(msg, "EcrWebService")));
+}
+
+// Usage
+EcrWebServiceTerminal hub = OpenWebServiceTerminal(
+    serial: "P653200008251",
+    merchantId: "13593",
+    terminalId: "101311",
+    webServiceSecureHashKey: webServiceKey,
+    environment: EcrEnvironment.UAT);
+
+// There is no IsReachableAsync / ProbeReachabilityAsync on Web Service.
+```
+
+Hub hosts (SDK-internal): SIT `https://test.amwalpg.com:25452`, UAT
+`https://test.amwalpg.com:15452`, PROD `https://pos.amwalpg.com`. Paths:
+`/Ecr/Sale`, `/Ecr/Void`, `/Ecr/Refund`, `/Ecr/Inquiry`.
+
+### 5.9 Web Service — sale
+
+```csharp
+async Task WebServiceSaleAsync(
+    EcrWebServiceTerminal hub,
+    decimal amount,
+    string orderNumber)
+{
+    // Always pass and persist merchantReference before the call
+    switch (await hub.SaleAsync(amount, merchantReference: orderNumber))
+    {
+        case EcrResult.Approved a when a.PartialApproval:
+            CompleteSale(a);   // still collect the remainder
+            break;
+
+        case EcrResult.Approved a:
+            CompleteSale(a);
+            break;
+
+        // Transport / unknown outcome — NOT a refusal. Inquire; do not resend.
+        case EcrResult.Declined d when d.NextStep == NextStep.InquireByMerchantReference:
+            HandleUnknownOutcome(orderNumber, d.Reason);   // often ResponseCode NO_RESPONSE
+            break;
+
+        case EcrResult.Declined d:
+            screen.Show(d.Reason);   // real Hub refusal
+            break;
+
+        case EcrResult.Failed f:
+            // Only non-numeric merchant/terminal IDs (nothing was sent)
+            HandleUnknownOutcome(orderNumber, f.Failure.Message);
+            break;
+    }
+}
+```
+
+### 5.10 Web Service — void
+
+```csharp
+async Task WebServiceVoidAsync(EcrWebServiceTerminal hub, string receiptNumber)
+{
+    switch (await hub.VoidAsync(receiptNumber: receiptNumber))
+    {
+        case EcrResult.Approved a:
+            RecordVoid(a.Rrn, a.Amount);
+            break;
+        case EcrResult.Declined d when d.NextStep == NextStep.InquireByMerchantReference:
+            HandleUnknownOutcome("", d.Reason);
+            break;
+        case EcrResult.Declined d:
+            screen.Show(d.Reason);
+            break;
+        case EcrResult.Failed f:
+            HandleUnknownOutcome("", f.Failure.Message);
+            break;
+    }
+}
+```
+
+### 5.11 Web Service — refund
+
+```csharp
+async Task WebServiceRefundAsync(
+    EcrWebServiceTerminal hub,
+    decimal amount,
+    string receiptNumber,
+    string transactionDate)   // yyyyMMdd
+{
+    switch (await hub.RefundAsync(
+        amount: amount,
+        receiptNumber: receiptNumber,
+        transactionDate: transactionDate))
+    {
+        case EcrResult.Approved a: CompleteRefund(a); break;
+        case EcrResult.Declined d when d.NextStep == NextStep.InquireByMerchantReference:
+            HandleUnknownOutcome("", d.Reason); break;
+        case EcrResult.Declined d: screen.Show(d.Reason); break;
+        case EcrResult.Failed f:   HandleUnknownOutcome("", f.Failure.Message); break;
+    }
+}
+```
+
+### 5.12 Web Service — inquiry by receipt (STAN)
+
+```csharp
+async Task WebServiceInquireByStanAsync(
+    EcrWebServiceTerminal hub,
+    string receiptNumber,
+    string transactionDate)   // yyyyMMdd
+{
+    switch (await hub.InquireAsync(
+        receiptNumber: receiptNumber,
+        transactionDate: transactionDate))
+    {
+        case EcrInquiry.Found found:
+            Reconcile(found.Transaction);
+            break;
+        case EcrInquiry.NotFound n:
+            screen.Show(n.Reason);   // Hub said not found — not a transport failure
+            break;
+        case EcrInquiry.Failed f:
+            // Lookup itself failed (often ConnectionLost) — still unknown; ask again
+            screen.Show(f.Failure.Message);
+            break;
+    }
+}
+```
+
+### 5.13 Web Service — inquiry by merchant reference
+
+```csharp
+async Task WebServiceInquireByReferenceAsync(
+    EcrWebServiceTerminal hub,
+    string orderNumber)
+{
+    // Prefer this after a lost sale. Date may be blank — do not invent "today".
+    switch (await hub.InquireByReferenceAsync(
+        originalReference: orderNumber,
+        transactionDate: ""))
+    {
+        case EcrInquiry.Found found:  Reconcile(found.Transaction); break;
+        case EcrInquiry.NotFound:     /* Hub has no match — still may need batch reconcile */ break;
+        case EcrInquiry.Failed:       Escalate(); break;
+    }
+}
+```
+
+### 5.14 Web Service — what is not available
+
+| Operation | Wi‑Fi | Web Service |
+|---|---|---|
+| `ReceiptAsync` / e-receipt QR | Yes | **No** — no method; opened session returns `EcrReceipt.Unavailable` |
+| `IsReachableAsync` / probe | Yes | **No** |
+| `originalTerminalId` on void/refund/inquiry | Yes | Not on the public Web Service API |
+| Auto-inquire after lost sale | Yes (default) | **No** — call `InquireByReferenceAsync` yourself |
+
+Mode-agnostic alternative after either setup: `EcrSessions.Open(serial, plan)` returns
+an `EcrOpenedSession` with the same operation names; check `UsesLan` /
+`UsesWebService` before probe, receipt, or `originalTerminalId`.
+
+---
+
+## 6. Your first sale
+
+For complete, transport-specific snippets (setup + sale/void/refund/inquiry/receipt),
+see [§5](#5-full-examples--wifi-and-web-service).
 
 ```csharp
 async Task TakePaymentAsync(decimal amount)
@@ -633,7 +1061,7 @@ the probe and then rejects the request as busy.
 
 ---
 
-## 6. Handling the three outcomes
+## 7. Handling the three outcomes
 
 `EcrResult` has three cases and the difference between the last two is the whole
 game:
@@ -642,7 +1070,7 @@ game:
 |---|---|---|
 | `Approved` | Money was taken | Complete the sale |
 | `Declined` | The terminal answered and refused | Ask for another payment method |
-| `Failed` | **Nothing was learned** | Do not retry blindly — see §9 |
+| `Failed` | **Nothing was learned** | Do not retry blindly — see §10 |
 
 ```csharp
 switch (await terminal.SaleAsync(amount))
@@ -653,7 +1081,7 @@ switch (await terminal.SaleAsync(amount))
         a.Rrn              // retrieval reference number
         a.AuthCode         // authorisation code; placeholder on a void
         a.MaskedPan        // "543173xxxx5785" — may be empty
-        a.PartialApproval  // see §7
+        a.PartialApproval  // see §8
         a.Raw              // the terminal's full answer, as JSON text
         break;
     case EcrResult.Declined d:
@@ -703,21 +1131,19 @@ key is configured). Web Service requests are signed; Hub responses are read from
 the JSON envelope without a local signature check.
 
 ```csharp
-// LAN ECR — field secureHash, Wi‑Fi and USB cable key
+// LAN ECR — field secureHash, Wi‑Fi and USB cable key (from settings)
 var lanPlan = EcrSessions.Plan(
     link: new EcrLink.Lan(Host: registered.IpAddress),
-    config: new EcrConfig { SecureHashKey = secrets.LanKeyFor(registered.SerialNumber) },
-    rawSecureHashKey: secrets.LanKeyFor(registered.SerialNumber));
+    config: new EcrConfig { SecureHashKey = secrets.LanKeyFor(registered.SerialNumber) });
 
-// Web Service ECR — field secureHashValue, REST key (different secret)
+// Web Service ECR — field secureHashValue, REST key (different secret from settings)
 var wsPlan = EcrSessions.Plan(
     link: new EcrLink.WebService(MerchantId: registered.MerchantId, TerminalId: registered.TerminalId),
     config: new EcrConfig
     {
         SecureHashKey = secrets.WebServiceKey,
         Environment = EcrEnvironment.UAT,
-    },
-    rawSecureHashKey: secrets.WebServiceKey);
+    });
 ```
 
 Both transports use the same **algorithm** — HMAC-SHA256 over a sorted
@@ -739,7 +1165,7 @@ Three things signing buys you, and one it does not:
 
 Treat keys like passwords: not in your repository, not in a log, and not shared
 between customers — and on Windows, encrypted at rest (see
-[§14](#14-going-to-production)). If one leaks, ask Amwal to rotate it.
+[§15](#15-going-to-production)). If one leaks, ask Amwal to rotate it.
 
 Until a terminal has been issued a key it accepts unsigned messages, so you can
 configure this before or after Amwal switches it on without a flag day.
@@ -786,7 +1212,7 @@ indistinguishable in your own records later.
 
 ---
 
-## 7. Partial approval
+## 8. Partial approval
 
 The bank may authorise **less** than was asked for. That is an approval, not a
 refusal, and the customer still owes the difference:
@@ -812,7 +1238,11 @@ handing over goods for money you did not receive.
 
 ---
 
-## 8. Void, refund, inquiry, receipt
+## 9. Void, refund, inquiry, receipt
+
+Full Wi‑Fi and Web Service listings for each call are in
+[§5](#5-full-examples--wifi-and-web-service). This section explains the rules;
+§5 is the copy-paste form.
 
 ### Void — cancel a transaction in full
 
@@ -922,7 +1352,7 @@ Leave it out and the terminal assumes its own.
 
 ---
 
-## 9. When the answer never comes
+## 10. When the answer never comes
 
 **This is the most important section in this guide.**
 
@@ -1049,7 +1479,7 @@ async Task ResolveOpenSalesAsync()
 
 ---
 
-## 10. Building your own form
+## 11. Building your own form
 
 `EcrTransactionType` declares what each operation needs, so drive your UI from it
 instead of repeating the rules. The flags are extension methods in
@@ -1091,7 +1521,7 @@ request and report the answer.
 
 ---
 
-## 11. Threading and lifecycle
+## 12. Threading and lifecycle
 
 Every call is an `async` method returning a `Task`. It never blocks the calling
 thread on network I/O, and it uses `ConfigureAwait(false)` for its own awaits, so
@@ -1182,7 +1612,7 @@ transaction.** The call throws `OperationCanceledException` — it does **not**
 return a result — and the terminal carries on with the cardholder. Treat a
 cancelled call exactly like `Failure.Timeout`: an unknown outcome. No
 auto-inquiry runs on cancellation, so *you* resolve it, by the reference you
-passed (§9):
+passed (§10):
 
 ```csharp
 try
@@ -1215,7 +1645,7 @@ on the second one. Inquiries and receipts are answered while busy.
 
 Nothing special: `await` from `Main` (`static async Task Main`) or from a
 `BackgroundService`. There is no synchronisation context to worry about. A
-service stop is a cancellation — see [§14](#14-going-to-production).
+service stop is a cancellation — see [§15](#15-going-to-production).
 
 ### Running in a web app
 
@@ -1291,11 +1721,11 @@ For Web Service ECR, follow the [initialization process](#initialization-process
 - **LAN ECR needs a network route from the server to the terminal** on TCP 9100. A
   server in a data centre cannot reach a terminal on a shop's Wi-Fi; use Web
   Service ECR there.
-- **A lost answer is not a decline** — the same rule as everywhere (§9).
+- **A lost answer is not a decline** — the same rule as everywhere (§10).
 
 ---
 
-## 12. Logging
+## 13. Logging
 
 Silent by default — the SDK never writes to a log you did not choose. It has no
 logging dependency: `IEcrLogger` is one method, `Debug(string)`, and
@@ -1348,7 +1778,7 @@ objects during debugging.
 
 ---
 
-## 13. Testing without hardware
+## 14. Testing without hardware
 
 A stand-in listener that speaks the protocol ships in this repository
 (`tools/fake_pos_server.py`, Python 3). Get it from a checkout, or:
@@ -1417,7 +1847,7 @@ Also test, before you ship:
 
 ---
 
-## 14. Going to production
+## 15. Going to production
 
 A checklist worth walking before the first live terminal:
 
@@ -1440,7 +1870,7 @@ A checklist worth walking before the first live terminal:
 - [ ] No `.Result` / `.Wait()` on an ECR call
 - [ ] TMS has the correct `terminalMode` and `ecrMode` on every terminal
 - [ ] The till's clock and time zone are right (the request carries the till's local time)
-- [ ] Someone other than the developer has run the failure cases in §13
+- [ ] Someone other than the developer has run the failure cases in §14
 
 ### Storing keys with DPAPI
 
@@ -1513,7 +1943,7 @@ Points that bite in a service:
 - **A stop request is a cancellation.** If `stoppingToken` fires mid-sale and you
   passed it to `SaleAsync`, you get `OperationCanceledException` and the terminal
   carries on. Do not pass the stopping token to a money-moving call unless you have
-  the write-ahead journal from [§9](#make-the-unknown-recoverable) — and on start-up
+  the write-ahead journal from [§10](#make-the-unknown-recoverable) — and on start-up
   resolve whatever it still lists as open.
 - **Run as an account you have planned DPAPI for** (above), not whatever the
   installer defaulted to.

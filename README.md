@@ -135,7 +135,7 @@ Service, Bluetooth ECR, Native AOT / trimming support.
 
 | | |
 |---|---|
-| **[Integration guide](https://github.com/amwal-pay/AmwalpayEcrWindows/blob/main/docs/integration-guide.md)** | From an empty project to a working sale, then everything needed to ship. **Start here.** Includes [Web Service initialization](https://github.com/amwal-pay/AmwalpayEcrWindows/blob/main/docs/integration-guide.md#initialization-process). |
+| **[Integration guide](https://github.com/amwal-pay/AmwalpayEcrWindows/blob/main/docs/integration-guide.md)** | From an empty project to a working sale, then everything needed to ship. **Start here.** Includes [full Wi‑Fi and Web Service examples](https://github.com/amwal-pay/AmwalpayEcrWindows/blob/main/docs/integration-guide.md#5-full-examples--wifi-and-web-service) (setup + each operation) and [Web Service initialization](https://github.com/amwal-pay/AmwalpayEcrWindows/blob/main/docs/integration-guide.md#initialization-process). |
 | **[Compatibility](https://github.com/amwal-pay/AmwalpayEcrWindows/blob/main/docs/compatibility.md)** | Supported platforms, what was and was not verified, C# version, .NET Framework and web hosting |
 | **[API reference](https://github.com/amwal-pay/AmwalpayEcrWindows/blob/main/docs/api-reference.md)** | Every public type and method, with parameters, returns and examples |
 | **[Wire protocol](https://github.com/amwal-pay/AmwalpayEcrWindows/blob/main/docs/protocol.md)** | The bytes on the socket. For other platforms, debugging, or terminal-side work |
@@ -233,6 +233,28 @@ are never logged in full.
 `ecrMode` `1` (USB), `2` (Wi-Fi) or `4` (Web Service); Wi-Fi terminals show their
 address under the card logos on the idle screen.
 
+### Setup structure (same as the Android ECR-simulator)
+
+Amwal issues **two different secrets**. Store them in **app settings**, not on each
+terminal record — then pick one when you plan:
+
+| Settings (global) | Used when |
+|---|---|
+| Wi‑Fi/LAN secure hash key | `ecrMode` 1 / 2 / 3 (USB, Wi‑Fi, Bluetooth) |
+| Web Service secure hash key + SIT/UAT/PROD | `ecrMode` 4 |
+
+| Terminal registry (per device) | No signing key |
+|---|---|
+| Wi‑Fi | name, serial, IP, port |
+| Web Service | name, serial, merchant ID, terminal ID |
+
+Operations: select a terminal → `Plan` with `secureHashKeyFor(mode)` → `Open` /
+`SaleAsync` / … The active-config card shows **one** key label (the mode in use).
+
+`Plan`'s optional `rawSecureHashKey` is the same typed string when you want a
+malformed key as a plan issue instead of an exception — it is **not** a second secret.
+From a validated store, pass the key only on `EcrConfig`.
+
 ### Wi‑Fi / LAN initialization
 
 ```csharp
@@ -240,8 +262,7 @@ using AmwalPay.Ecr;
 
 var plan = EcrSessions.Plan(
     link: new EcrLink.Lan(Host: "192.168.1.50"),
-    config: new EcrConfig { SecureHashKey = secrets.LanKeyFor(serialNumber) },
-    rawSecureHashKey: secrets.LanKeyFor(serialNumber));
+    config: new EcrConfig { SecureHashKey = secrets.LanKeyFor(serialNumber) });
 
 if (!plan.IsReady)
 {
@@ -279,8 +300,7 @@ var plan = EcrSessions.Plan(
     {
         SecureHashKey = secrets.WebServiceKey,   // Web Service key only
         Environment = EcrEnvironment.UAT,        // SIT / UAT / PROD
-    },
-    rawSecureHashKey: secrets.WebServiceKey);
+    });
 
 if (!plan.IsReady)
 {
@@ -400,7 +420,7 @@ On **Web Service** a network error on a money-moving call arrives as `Declined`
 reliable signal: an unknown outcome, not a refusal — call
 `InquireByReferenceAsync` with the sale's `merchantReference` (or
 `InquireAsync` if you have the STAN) before retrying. See
-[the integration guide](https://github.com/amwal-pay/AmwalpayEcrWindows/blob/main/docs/integration-guide.md#9-when-the-answer-never-comes).
+[the integration guide](https://github.com/amwal-pay/AmwalpayEcrWindows/blob/main/docs/integration-guide.md#10-when-the-answer-never-comes).
 
 ---
 
@@ -435,7 +455,7 @@ and [troubleshooting](https://github.com/amwal-pay/AmwalpayEcrWindows/blob/main/
 synchronisation context. A stop request is a cancellation: it stops your wait,
 **not** the payment, so write the sale's `merchantReference` down before you call
 `SaleAsync` and inquire on the next start. See the
-[integration guide](https://github.com/amwal-pay/AmwalpayEcrWindows/blob/main/docs/integration-guide.md#14-going-to-production).
+[integration guide](https://github.com/amwal-pay/AmwalpayEcrWindows/blob/main/docs/integration-guide.md#15-going-to-production).
 
 **Old .NET Framework and TLS.** LAN ECR is plain TCP, no TLS. Web Service ECR is
 HTTPS to the Hub and needs TLS 1.2; an app that targets .NET Framework earlier than 4.7

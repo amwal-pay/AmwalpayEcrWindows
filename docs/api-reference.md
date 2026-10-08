@@ -10,7 +10,7 @@ is visible to you, and nothing here changes without a version bump.
 - Every operation is `async` and returns a `Task<T>`. Names end in `Async`.
 - Every asynchronous method takes a trailing `CancellationToken cancellationToken = default`.
   Cancelling stops the wait, **not** the transaction — see
-  [Threading and lifecycle](integration-guide.md#11-threading-and-lifecycle).
+  [Threading and lifecycle](integration-guide.md#12-threading-and-lifecycle).
 - Amounts you send are `decimal`. Amounts you receive are `string`s in major units,
   invariant culture (`"1.234"`).
 - Results, links, plans and config are `record`s, so they compare by value and
@@ -71,7 +71,9 @@ invalid hex key, empty signing key — rather than throwing.
 Pass `rawSecureHashKey` when the user entered a key that might fail
 `EcrConfig`'s property setter (odd length, non-hex). It defaults to
 `config.SecureHashKey`. The plan reports the problem and sanitizes the key to
-empty so you can still show other issues. The key is trimmed.
+empty so you can still show other issues. The key is trimmed. This is the **same**
+typed string, not a second secret — apps normally keep two mode-specific keys in
+settings (Wi‑Fi/LAN vs Web Service) and pass only the one for the selected mode.
 
 For [EcrLink.Lan](#ecrlink), the resolved config's `Port` comes from the link.
 For [EcrLink.WebService](#ecrlink), `MerchantId` and `TerminalId` on the config
@@ -787,7 +789,7 @@ var terminal = new EcrTerminal(
 The app persists secrets and chooses which one to put on `EcrConfig` for the
 selected terminal mode. The SDK only signs and verifies with that value — it
 does not store keys. On Windows, keep it encrypted at rest (DPAPI; see the
-[guide](integration-guide.md#14-going-to-production)).
+[guide](integration-guide.md#15-going-to-production)).
 
 **LAN ECR** adds field `secureHash` and a per-request `nonce`, and requires the
 answer to be signed and to echo the nonce.
