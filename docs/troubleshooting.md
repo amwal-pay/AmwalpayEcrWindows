@@ -223,6 +223,10 @@ Check `w32tm /query /status` and the time-zone setting.
 
 ## Web Service ECR
 
+Setup checklist (prerequisites → `Plan` → `IsReady` → `WebServiceTerminal` /
+`Open` → first call):
+[initialization process](integration-guide.md#initialization-process).
+
 ### Every Hub call fails authentication
 
 Three things to check, in order:

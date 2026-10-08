@@ -135,7 +135,7 @@ Service, Bluetooth ECR, Native AOT / trimming support.
 
 | | |
 |---|---|
-| **[Integration guide](https://github.com/amwal-pay/AmwalpayEcrWindows/blob/main/docs/integration-guide.md)** | From an empty project to a working sale, then everything needed to ship. **Start here.** |
+| **[Integration guide](https://github.com/amwal-pay/AmwalpayEcrWindows/blob/main/docs/integration-guide.md)** | From an empty project to a working sale, then everything needed to ship. **Start here.** Includes [Web Service initialization](https://github.com/amwal-pay/AmwalpayEcrWindows/blob/main/docs/integration-guide.md#initialization-process). |
 | **[Compatibility](https://github.com/amwal-pay/AmwalpayEcrWindows/blob/main/docs/compatibility.md)** | Supported platforms, what was and was not verified, C# version, .NET Framework and web hosting |
 | **[API reference](https://github.com/amwal-pay/AmwalpayEcrWindows/blob/main/docs/api-reference.md)** | Every public type and method, with parameters, returns and examples |
 | **[Wire protocol](https://github.com/amwal-pay/AmwalpayEcrWindows/blob/main/docs/protocol.md)** | The bytes on the socket. For other platforms, debugging, or terminal-side work |
@@ -233,7 +233,7 @@ are never logged in full.
 `ecrMode` `1` (USB), `2` (Wi-Fi) or `4` (Web Service); Wi-Fi terminals show their
 address under the card logos on the idle screen.
 
-**2. Plan a session and address the terminal:**
+### Wi‑Fi / LAN initialization
 
 ```csharp
 using AmwalPay.Ecr;
@@ -256,23 +256,82 @@ EcrTerminal terminal = EcrSessions.LanTerminal(
 
 For USB cable ECR, plan with `new EcrLink.UsbCable()` and build the terminal with
 `EcrSessions.UsbCableTerminal(...)`, passing an `IEcrChannel` **that you provide**.
-For Web Service ECR (`ecrMode: 4`), use `EcrLink.WebService` and
-`EcrSessions.WebServiceTerminal()` — see the
-[integration guide](https://github.com/amwal-pay/AmwalpayEcrWindows/blob/main/docs/integration-guide.md#4-web-service-ecr).
-Everything after that is identical to LAN.
 
-**3. Take a payment:**
+### Web Service initialization (`ecrMode: 4`)
+
+Web Service does **not** use the terminal's LAN IP. The till calls the Amwal Hub
+over HTTPS; the Hub reaches the POS. You need from Amwal (or TMS):
+
+| You supply | Notes |
+|---|---|
+| Terminal serial | Same serial TMS registered (e.g. `P653200008251`) |
+| Merchant ID + terminal ID | Numeric strings; go on `EcrLink.WebService` |
+| Environment | `SIT`, `UAT`, or `PROD` — SDK picks the Hub base URL |
+| **Web Service** secure hash key | Hex, even length, ≥ 16 chars — **not** the Wi‑Fi/LAN key |
+
+```csharp
+using AmwalPay.Ecr;
+
+// 1) Plan — validates IDs and the Web Service key; does not call the Hub yet.
+var plan = EcrSessions.Plan(
+    link: new EcrLink.WebService(MerchantId: "13593", TerminalId: "101311"),
+    config: new EcrConfig
+    {
+        SecureHashKey = secrets.WebServiceKey,   // Web Service key only
+        Environment = EcrEnvironment.UAT,        // SIT / UAT / PROD
+    },
+    rawSecureHashKey: secrets.WebServiceKey);
+
+if (!plan.IsReady)
+{
+    // Typical issues: "Merchant ID is required", "must be numeric",
+    // "Web Service secure hash key is not configured"
+    screen.Show(string.Join("\n", plan.Issues));
+    return;
+}
+
+// 2a) Typed client — or 2b) EcrSessions.Open for a mode-agnostic session.
+EcrWebServiceTerminal terminal = EcrSessions.WebServiceTerminal(
+    terminalSerial: "P653200008251",
+    plan: plan,
+    logger: EcrLogger.From(msg => Debug.WriteLine(msg)));
+
+// 2b) Same plan, one API shape for LAN / USB / Web Service:
+// EcrOpenedSession session = EcrSessions.Open("P653200008251", plan, logger: logger);
+```
+
+Hub hosts (resolved from `Environment`, not configured by the app):
+
+| Environment | Base URL |
+|---|---|
+| SIT | `https://test.amwalpg.com:25452` |
+| UAT | `https://test.amwalpg.com:15452` |
+| PROD | `https://pos.amwalpg.com` |
+
+Paths are fixed: `/Ecr/Sale`, `/Ecr/Void`, `/Ecr/Refund`, `/Ecr/Inquiry`. Requests
+carry Hub-required `requestDateTime` and are signed with `secureHashValue`.
+
+On .NET Framework **before 4.7**, enable TLS 1.2 once at start-up before the first
+call: `ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;`.
+
+Full checklist, recovery after a lost answer, and the support matrix:
+[Web Service ECR](https://github.com/amwal-pay/AmwalpayEcrWindows/blob/main/docs/integration-guide.md#4-web-service-ecr).
+
+### Take a payment
 
 ```csharp
 async Task TakePaymentAsync(Order order)
 {
-    if (!await terminal.IsReachableAsync())
+    // LAN only — on Web Service ProbeReachabilityAsync / IsReachableAsync are unavailable
+    // (EcrOpenedSession.ProbeReachabilityAsync returns null). Skip or gate on UsesLan.
+    if (terminal is EcrTerminal lan && !await lan.IsReachableAsync())
     {
         screen.Show("Terminal not reachable");
         return;
     }
 
     // merchantReference is optional; without it the SDK generates one.
+    // Store it before the call so you can InquireByReferenceAsync after a lost answer.
     switch (await terminal.SaleAsync(order.Total, merchantReference: order.Number))
     {
         case EcrResult.Approved a when a.PartialApproval:
@@ -281,6 +340,10 @@ async Task TakePaymentAsync(Order order)
 
         case EcrResult.Approved a:
             CompleteSale(a.Amount, a.Rrn, a.AuthCode);
+            break;
+
+        case EcrResult.Declined d when d.NextStep == NextStep.InquireByMerchantReference:
+            HandleUnknownOutcome(d);   // Web Service transport / unknown outcome — inquire, do not retry
             break;
 
         case EcrResult.Declined d:
@@ -299,8 +362,7 @@ async Task TakePaymentAsync(Order order)
 ```
 
 Amounts are `decimal`: write `1.234m`; `SaleAsync(1.234)` does not compile, which is
-the point. A single `EcrTerminal` holds no connection between calls; keep one per
-terminal. The
+the point. Clients hold no connection between calls; keep one per terminal. The
 [integration guide](https://github.com/amwal-pay/AmwalpayEcrWindows/blob/main/docs/integration-guide.md)
 takes it from here.
 

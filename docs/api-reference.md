@@ -143,6 +143,20 @@ public static EcrWebServiceTerminal WebServiceTerminal(
 Builds a Web Service client. `plan` must be for Web Service
 (`plan.UsesWebService == true`), otherwise `ArgumentException`.
 
+**Initialization order**
+
+1. Collect serial, numeric merchant/terminal IDs, `EcrEnvironment`, and the
+   **Web Service** secure hash key (not the LAN key).
+2. `EcrSessions.Plan(new EcrLink.WebService(merchantId, terminalId), config, rawKey)`.
+3. If `!plan.IsReady`, show `plan.Issues` and stop.
+4. Call `WebServiceTerminal(serial, plan)` **or** `Open(serial, plan)` for a
+   mode-agnostic [EcrOpenedSession](#ecropenedsession).
+5. Call `SaleAsync` / `VoidAsync` / `RefundAsync` / `InquireAsync` /
+   `InquireByReferenceAsync` — the Hub is contacted only then.
+
+See the [integration guide §4](integration-guide.md#initialization-process) for
+Hub URLs, TLS, and recovery after a lost answer.
+
 > **`LanTerminal`, `UsbCableTerminal` and `WebServiceTerminal` do not check
 > `plan.IsReady`; only `Open` does.** A plan that is not ready may carry an empty
 > key, which builds an _unsigned_ terminal. Always test `plan.IsReady` first.
@@ -184,7 +198,12 @@ with [EcrFrames](#ecrframes).
 
 Hosted REST — HTTPS with JSON body signing. Hub URLs are resolved inside the SDK
 from [EcrConfig.Environment](#ecrconfig); the app does not configure base URLs.
-`MerchantId` and `TerminalId` must be numeric strings.
+`MerchantId` and `TerminalId` must be numeric strings. Construct with
+`new EcrLink.WebService(MerchantId: "13593", TerminalId: "101311")`.
+
+`EcrSessions.Plan` copies those IDs onto the resolved [EcrConfig](#ecrconfig) and
+requires a non-empty Web Service secure hash key before `IsReady` is true. Full
+init steps: [integration guide](integration-guide.md#initialization-process).
 
 ---
 
@@ -531,7 +550,10 @@ public sealed class EcrWebServiceTerminal
 ```
 
 Web Service ECR client — REST over HTTPS with JSON body signing. Use instead of
-[EcrTerminal](#ecrterminal) when TMS sets `ecrMode: 4`.
+[EcrTerminal](#ecrterminal) when TMS sets `ecrMode: 4`. Prefer building via
+[EcrSessions.WebServiceTerminal](#webserviceterminal) after
+[Plan](#plan) reports `IsReady` — see
+[initialization process](integration-guide.md#initialization-process).
 
 Requires `config.MerchantId`, `config.TerminalId` (numeric), and the **Web Service
 secure hash key** on `config.SecureHashKey`. Hub URLs come from

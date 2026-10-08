@@ -23,7 +23,7 @@ one repository:
 1. [Before you start](#1-before-you-start)
 2. [Add the SDK](#2-add-the-sdk)
 3. [Address a terminal](#3-address-a-terminal)
-4. [Web Service ECR](#4-web-service-ecr)
+4. [Web Service ECR](#4-web-service-ecr) — [initialization](#initialization-process), caveat, support matrix
 5. [Your first sale](#5-your-first-sale)
 6. [Handling the three outcomes](#6-handling-the-three-outcomes)
 7. [Partial approval](#7-partial-approval)
@@ -355,7 +355,8 @@ var result = await session.SaleAsync(1.234m, merchantReference: order.Number);
 
 The session hides differences that matter, so read the
 [matrix in §4](#lan-vs-web-service--what-the-sdk-supports-today) before relying on
-it for anything beyond sale, void, refund and inquiry-by-receipt.
+it for anything beyond sale, void, refund and inquiry (STAN or by reference).
+Receipt and reachability probes remain LAN / USB only.
 
 ### What the app owns vs what the SDK owns
 
@@ -380,6 +381,24 @@ of TCP to the terminal's IP. The SDK resolves Hub URLs from
 or PROD and supplies backend IDs plus the **Web Service secure hash key** — which
 is **not** the same secret as LAN ECR.
 
+### Initialization process
+
+Do this once per terminal (or whenever credentials change). Nothing is sent to the
+Hub until the first `SaleAsync` / `VoidAsync` / `RefundAsync` / `InquireAsync`.
+
+**A. Prerequisites (from Amwal / TMS)**
+
+1. Terminal profile: `terminalMode: 1`, `ecrMode: 4`.
+2. **Terminal serial** as registered in TMS.
+3. **Merchant ID** and **terminal ID** (numeric).
+4. **Environment**: SIT, UAT, or PROD.
+5. **Web Service secure hash key** (even-length hex, at least 16 characters) —
+   issued for REST, separate from the Wi‑Fi/LAN key.
+6. On .NET Framework targeting a version **before 4.7**: enable TLS 1.2 at process
+   start (`ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12`).
+
+**B. Plan (validate without calling the Hub)**
+
 ```csharp
 var plan = EcrSessions.Plan(
     link: new EcrLink.WebService(MerchantId: "13593", TerminalId: "101311"),
@@ -388,30 +407,81 @@ var plan = EcrSessions.Plan(
         SecureHashKey = secrets.WebServiceKey,
         Environment = EcrEnvironment.UAT,
     },
-    rawSecureHashKey: secrets.WebServiceKey);
+    rawSecureHashKey: secrets.WebServiceKey);   // typed key; Plan sanitizes odd-length / non-hex
 
 if (!plan.IsReady)
 {
+    // Show plan.Issues — do not open a client yet
     screen.Show(string.Join("\n", plan.Issues));
     return;
 }
+// plan.ConnectionSummary → e.g. "UAT · merchant 13593 · terminal 101311" (no secrets)
+// plan.Config.MerchantId / TerminalId were copied from the link
+```
 
+`Plan` may report:
+
+| Issue | Cause |
+|---|---|
+| `Merchant ID is required for Web Service` / `Terminal ID is required…` | Blank IDs |
+| `Merchant ID must be numeric` / `Terminal ID must be numeric` | Non-numeric IDs |
+| `Secure hash key must be an even-length hex string of at least 16 characters` | Malformed key |
+| `Web Service secure hash key is not configured` | Empty key after sanitization |
+
+**C. Build a client**
+
+```csharp
+// Typed Web Service client
 EcrWebServiceTerminal terminal = EcrSessions.WebServiceTerminal(
-    terminalSerial: "P653200008251-Web",
+    terminalSerial: "P653200008251",
     plan: plan,
     logger: EcrLogger.From(message => Debug.WriteLine(message, "EcrWebService")));
 
-switch (await terminal.SaleAsync(1.234m))
+// Or one session for every mode (LAN / USB / Web Service) — Open requires plan.IsReady
+EcrOpenedSession session = EcrSessions.Open(
+    terminalSerial: "P653200008251",
+    plan: plan,
+    logger: EcrLogger.From(message => Debug.WriteLine(message, "Ecr")));
+```
+
+`WebServiceTerminal` / `LanTerminal` do **not** re-check `IsReady` — only `Open`
+does. Always gate on `plan.IsReady` yourself if you call the typed builders.
+
+**D. First operation**
+
+```csharp
+switch (await terminal.SaleAsync(1.234m, merchantReference: order.Number))
 {
     case EcrResult.Approved a: CompleteSale(a); break;
-    case EcrResult.Declined d: screen.Show(d.Reason); break;    // read the caveat below first
+    case EcrResult.Declined d when d.NextStep == NextStep.InquireByMerchantReference:
+        HandleUnknownOutcome(d); break;          // read the caveat below
+    case EcrResult.Declined d: screen.Show(d.Reason); break;
     case EcrResult.Failed f:   HandleUnknownOutcome(f.Failure); break;
 }
 ```
 
-Web Service signing uses field `secureHashValue` and the same sorted
-`key=value&…` payload as LAN ECR, but under the **Web Service key** Amwal issued
-for REST. Using the LAN key produces valid-looking code that the Hub rejects.
+There is no reachability probe on Web Service (`ProbeReachabilityAsync` on an
+opened session returns `null`). Store `merchantReference` **before** the call so
+you can `InquireByReferenceAsync` after a lost answer.
+
+**E. What the SDK sends (after init)**
+
+| Item | Value |
+|---|---|
+| Hub base | From `EcrConfig.Environment` (SIT / UAT / PROD hosts below) |
+| Paths | `/Ecr/Sale`, `/Ecr/Void`, `/Ecr/Refund`, `/Ecr/Inquiry` |
+| Body | Hub contract fields including `messageType`, `requestDateTime` (= `transactionDateTime`) |
+| Signature | Field `secureHashValue` under the Web Service key |
+
+| Environment | Hub base |
+|---|---|
+| SIT | `https://test.amwalpg.com:25452` |
+| UAT | `https://test.amwalpg.com:15452` |
+| PROD | `https://pos.amwalpg.com` |
+
+Web Service signing uses the same sorted `key=value&…` payload algorithm as LAN
+ECR, but under the **Web Service key** Amwal issued for REST. Using the LAN key
+produces valid-looking code that the Hub rejects.
 
 ### The Web Service caveat: a network error is a `Declined`
 
@@ -1202,9 +1272,10 @@ app.MapPost("/sales", async (SaleRequest request, EcrTerminal terminal) =>
 record SaleRequest(decimal Total, string OrderNumber);
 ```
 
-For Web Service ECR, register `EcrWebServiceTerminal` the same way, planning with
-`EcrLink.WebService(...)` and the **Web Service key**, then
-`EcrSessions.WebServiceTerminal(serial, plan)`.
+For Web Service ECR, follow the [initialization process](#initialization-process)
+(§4): plan with `EcrLink.WebService(...)` and the **Web Service key**, gate on
+`plan.IsReady`, then register `EcrSessions.WebServiceTerminal(serial, plan)` (or
+`EcrSessions.Open`).
 
 **What a web app must still respect**
 
