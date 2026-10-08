@@ -74,7 +74,7 @@ namespace AmwalPay.Ecr.Tests.WebService
             Assert.True(answer.Flag("success"));
             var request = Assert.Single(handler.Requests);
             Assert.Equal(HttpMethod.Post, request.Method);
-            Assert.Equal("https://test.amwalpg.com:15452/Ecr/Sale", request.RequestUri!.ToString());
+            Assert.Equal("https://test.amwalpg.com:25453/Ecr/Sale", request.RequestUri!.ToString());
             Assert.Equal("application/json", request.Content!.Headers.ContentType!.MediaType);
             Assert.Contains(request.Headers.Accept, a => a.MediaType == "application/json");
             Assert.Equal(EcrJson.Write(body), Assert.Single(handler.Bodies));

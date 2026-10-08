@@ -486,16 +486,10 @@ you can `InquireByReferenceAsync` after a lost answer.
 
 | Item | Value |
 |---|---|
-| Hub base | From `EcrConfig.Environment` (SIT / UAT / PROD hosts below) |
+| Hub base | Resolved inside the SDK from `EcrConfig.Environment` (SIT / UAT / PROD) — hostnames are not app-configurable and are not published here |
 | Paths | `/Ecr/Sale`, `/Ecr/Void`, `/Ecr/Refund`, `/Ecr/Inquiry` |
 | Body | Hub contract fields including `messageType`, `requestDateTime` (= `transactionDateTime`) |
 | Signature | Field `secureHashValue` under the Web Service key |
-
-| Environment | Hub base |
-|---|---|
-| SIT | `https://test.amwalpg.com:25452` |
-| UAT | `https://test.amwalpg.com:15452` |
-| PROD | `https://pos.amwalpg.com` |
 
 Web Service signing uses the same sorted `key=value&…` payload algorithm as LAN
 ECR, but under the **Web Service key** Amwal issued for REST. Using the LAN key
@@ -852,8 +846,7 @@ EcrWebServiceTerminal hub = OpenWebServiceTerminal(
 // There is no IsReachableAsync / ProbeReachabilityAsync on Web Service.
 ```
 
-Hub hosts (SDK-internal): SIT `https://test.amwalpg.com:25452`, UAT
-`https://test.amwalpg.com:15452`, PROD `https://pos.amwalpg.com`. Paths:
+Hub hostnames are SDK-internal (chosen from SIT / UAT / PROD). Paths:
 `/Ecr/Sale`, `/Ecr/Void`, `/Ecr/Refund`, `/Ecr/Inquiry`.
 
 ### 5.9 Web Service — sale

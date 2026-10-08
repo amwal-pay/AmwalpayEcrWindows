@@ -320,16 +320,10 @@ EcrWebServiceTerminal terminal = EcrSessions.WebServiceTerminal(
 // EcrOpenedSession session = EcrSessions.Open("P653200008251", plan, logger: logger);
 ```
 
-Hub hosts (resolved from `Environment`, not configured by the app):
-
-| Environment | Base URL |
-|---|---|
-| SIT | `https://test.amwalpg.com:25452` |
-| UAT | `https://test.amwalpg.com:15452` |
-| PROD | `https://pos.amwalpg.com` |
-
-Paths are fixed: `/Ecr/Sale`, `/Ecr/Void`, `/Ecr/Refund`, `/Ecr/Inquiry`. Requests
-carry Hub-required `requestDateTime` and are signed with `secureHashValue`.
+Hub hostnames are resolved inside the SDK from `Environment` (SIT / UAT / PROD) —
+not configured or published for the app. Paths are fixed (`/Ecr/Sale`, `/Ecr/Void`,
+`/Ecr/Refund`, `/Ecr/Inquiry`). Requests carry Hub-required `requestDateTime` and
+are signed with `secureHashValue`.
 
 On .NET Framework **before 4.7**, enable TLS 1.2 once at start-up before the first
 call: `ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;`.

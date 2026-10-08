@@ -650,7 +650,7 @@ terminal is busy.
     "responseCode": "00",
     "message": "Receipt ready",
     "data": {
-      "receiptUrl": "https://test.amwalpg.com:25446/Transaction/DownloadReceipt?transactionId=318873a0-93f6-11f1-94a1-29b67ff8c66c",
+      "receiptUrl": "https://example.com/receipts/318873a0-93f6-11f1-94a1-29b67ff8c66c",
       "transactionId": "318873a0-93f6-11f1-94a1-29b67ff8c66c",
       "systemTraceNr": "000215"
     }
@@ -758,14 +758,10 @@ py tools\fake_pos_server.py --port 9100
 ## 9. Web Service REST
 
 When TMS sets `ecrMode: 4`, the till does not open TCP to the terminal. It posts
-JSON to the Amwal Hub over HTTPS. The C# SDK resolves the base URL from
-`EcrEnvironment` and uses fixed path suffixes:
-
-| Environment | Hub base                         |
-| ----------- | -------------------------------- |
-| SIT         | `https://test.amwalpg.com:25452` |
-| UAT         | `https://test.amwalpg.com:15452` |
-| PROD        | `https://pos.amwalpg.com`        |
+JSON to the Amwal Hub over HTTPS. The C# SDK resolves the Hub base URL from
+`EcrEnvironment` (SIT / UAT / PROD). **Hostnames and ports are SDK-internal and
+are not listed in documentation** — integrators only set the environment enum.
+Path suffixes are fixed:
 
 | Operation                    | Path           |
 | ---------------------------- | -------------- |

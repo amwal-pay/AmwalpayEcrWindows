@@ -833,21 +833,16 @@ public static class EcrEnvironments
 }
 ```
 
-Deployment environment for Web Service ECR. Set it on [EcrConfig.Environment](#ecrconfig);
-the SDK resolves Hub base URLs internally.
-
-| Environment | Hub base                         |
-| ----------- | -------------------------------- |
-| `SIT`       | `https://test.amwalpg.com:25452` |
-| `UAT`       | `https://test.amwalpg.com:15452` |
-| `PROD`      | `https://pos.amwalpg.com`        |
+Deployment environment for Web Service ECR. Set it on [EcrConfig.Environment](#ecrconfig).
+Hub hostnames and ports are **SDK-internal** and are not documented for integrators —
+the app only selects `SIT`, `UAT`, or `PROD`.
 
 |                                     |                                                                                                                     |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `EcrEnvironments.Default`           | `EcrEnvironment.SIT`                                                                                                |
 | `EcrEnvironments.FromName(string?)` | Parses a persisted name, ignoring case and surrounding whitespace; unknown values (and null) fall back to `Default` |
 
-Integrators do **not** configure REST paths or hostnames — only this enum.
+Integrators do **not** configure REST hostnames — only this enum.
 
 ---
 

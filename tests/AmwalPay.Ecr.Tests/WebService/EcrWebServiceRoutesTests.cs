@@ -26,7 +26,7 @@ namespace AmwalPay.Ecr.Tests.WebService
             var prod = EcrEnvironmentUrls.HubSocketUrl(EcrEnvironment.PROD);
 
             Assert.Equal("https://test.amwalpg.com:25452", sit);
-            Assert.Equal("https://test.amwalpg.com:15452", uat);
+            Assert.Equal("https://test.amwalpg.com:25453", uat);
             Assert.Equal("https://pos.amwalpg.com", prod);
             Assert.NotEqual(sit, uat);
             Assert.NotEqual(sit, prod);
@@ -85,11 +85,11 @@ namespace AmwalPay.Ecr.Tests.WebService
         {
             var routes = new EcrWebServiceRoutes(EcrEnvironment.UAT);
 
-            Assert.Equal("https://test.amwalpg.com:15452/Ecr/Sale", routes.FullUrl(EcrWebServiceOperation.Sale));
-            Assert.Equal("https://test.amwalpg.com:15452/Ecr/Void", routes.FullUrl(EcrWebServiceOperation.Void));
-            Assert.Equal("https://test.amwalpg.com:15452/Ecr/Refund", routes.FullUrl(EcrWebServiceOperation.Refund));
+            Assert.Equal("https://test.amwalpg.com:25453/Ecr/Sale", routes.FullUrl(EcrWebServiceOperation.Sale));
+            Assert.Equal("https://test.amwalpg.com:25453/Ecr/Void", routes.FullUrl(EcrWebServiceOperation.Void));
+            Assert.Equal("https://test.amwalpg.com:25453/Ecr/Refund", routes.FullUrl(EcrWebServiceOperation.Refund));
             Assert.Equal(
-                "https://test.amwalpg.com:15452/Ecr/Inquiry",
+                "https://test.amwalpg.com:25453/Ecr/Inquiry",
                 routes.FullUrl(EcrWebServiceOperation.TransactionStatus));
         }
 
