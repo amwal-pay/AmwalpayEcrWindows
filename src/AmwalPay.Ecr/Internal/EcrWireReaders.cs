@@ -18,12 +18,33 @@ namespace AmwalPay.Ecr.Internal
 
             if (!envelope.Success)
             {
-                var reason = envelope.DisplayMessage;
+                var nextStep = NextSteps.Of(json.Str("nextStep"));
+                // Web Service / Hub synthesise timeouts as a false envelope with
+                // nextStep INQUIRE_BY_MERCHANT_REFERENCE (and often responseCode
+                // NO_RESPONSE). That is not a decline — money may have moved — so it
+                // must surface as Failed and push the till to inquire by reference.
+                if (nextStep == NextStep.InquireByMerchantReference)
+                {
+                    var reason = envelope.DisplayMessage.Length != 0
+                        ? envelope.DisplayMessage
+                        : "timeout";
+                    var code = envelope.ResponseCode.Trim().ToUpperInvariant();
+                    Failure failure =
+                        code == "NO_RESPONSE" ||
+                        reason.IndexOf("timeout", StringComparison.OrdinalIgnoreCase) >= 0
+                            ? new Failure.Timeout(reason)
+                            : new Failure.ConnectionLost(reason);
+                    return new EcrResult.Failed(
+                        MerchantReference: resolvedReference,
+                        Failure: failure);
+                }
+
+                var declinedReason = envelope.DisplayMessage;
                 return new EcrResult.Declined(
                     MerchantReference: resolvedReference,
                     ResponseCode: envelope.ResponseCode,
-                    Reason: reason.Length != 0 ? reason : "Declined",
-                    NextStep: NextSteps.Of(json.Str("nextStep")),
+                    Reason: declinedReason.Length != 0 ? declinedReason : "Declined",
+                    NextStep: nextStep,
                     Raw: EcrJson.Write(json));
             }
 
@@ -160,6 +181,29 @@ namespace AmwalPay.Ecr.Internal
             }
 
             return new EcrReceipt.Ready(resolvedReference, url, EcrJson.Write(json));
+        }
+
+        /// <summary>
+        /// Reads the answer to a request to put the receipt away.
+        /// Success is taken from the envelope only — the terminal reports that it
+        /// is idle, whether or not it had a receipt up.
+        /// </summary>
+        public static EcrReceiptClosed ToReceiptClosed(this JsonObject json, string merchantReference)
+        {
+            var envelope = EcrResponseEnvelope.Parse(json);
+            var resolvedReference = Or(envelope.MerchantReference, merchantReference);
+
+            if (!envelope.Success)
+            {
+                var reason = envelope.DisplayMessage;
+                return new EcrReceiptClosed.Refused(
+                    MerchantReference: resolvedReference,
+                    ResponseCode: envelope.ResponseCode,
+                    Reason: reason.Length != 0 ? reason : "The terminal refused to close its receipt",
+                    Raw: EcrJson.Write(json));
+            }
+
+            return new EcrReceiptClosed.Idle(resolvedReference, EcrJson.Write(json));
         }
 
         /// <summary>

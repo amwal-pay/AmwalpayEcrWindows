@@ -25,6 +25,10 @@ public sealed class MainForm : Form
     private readonly Label _fieldError = new();
     private readonly Label _status = new();
     private readonly Button _submit = new();
+    private readonly Button _cancel = new();
+    private readonly Button _closeReceipt = new();
+    private readonly Label _closeReceiptStatus = new();
+    private readonly System.Windows.Forms.Timer _countdownTimer = new() { Interval = 1000 };
     private readonly TextBox _wifiKey = new();
     private readonly TextBox _webKey = new();
     private readonly TextBox _log = new();
@@ -38,6 +42,15 @@ public sealed class MainForm : Form
     private readonly Label _otherTerminalLabel = new();
 
     private bool _busy;
+    private CancellationTokenSource? _cts;
+    private string _busyStatus = "";
+    private int _remainingSeconds;
+    private int _totalSeconds;
+
+    // The money operation a Close receipt press would refer to (Web Service sends it
+    // as originalMerchantReference). Cleared when the next operation starts.
+    private Terminal? _lastTerminal;
+    private string _lastReference = "";
 
     public MainForm(
         TerminalRepository repository,
@@ -55,6 +68,7 @@ public sealed class MainForm : Form
         Font = new Font("Segoe UI", 9f);
 
         _sessions.AttachLogSink(AppendLog);
+        _countdownTimer.Tick += (_, _) => OnCountdownTick();
 
         var tabs = new TabControl { Dock = DockStyle.Fill };
         tabs.TabPages.Add(BuildTransactionTab());
@@ -131,7 +145,7 @@ public sealed class MainForm : Form
         _receiptLabel.Text = "Receipt / STAN";
         AddLabeled(root, row++, _receiptLabel, _receipt);
 
-        _referenceLabel.Text = "Original reference";
+        _referenceLabel.Text = "Original merchant reference";
         AddLabeled(root, row++, _referenceLabel, _originalReference);
 
         _dateLabel.Text = "Original date";
@@ -165,10 +179,35 @@ public sealed class MainForm : Form
         root.SetColumnSpan(_status, 2);
         row++;
 
+        var actions = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight };
+
         _submit.Text = "Send";
         _submit.AutoSize = true;
         _submit.Click += async (_, _) => await SubmitAsync();
-        root.Controls.Add(_submit, 1, row);
+        actions.Controls.Add(_submit);
+
+        // Stops waiting only. It cannot un-send a request: if it already reached the
+        // terminal the sale may still complete, so nothing here calls it "cancelled".
+        _cancel.Text = "Cancel operation";
+        _cancel.AutoSize = true;
+        _cancel.Visible = false;
+        _cancel.Click += (_, _) => _cts?.Cancel();
+        actions.Controls.Add(_cancel);
+
+        // Its own action, separate from dismissing a result dialog.
+        _closeReceipt.Text = "Close receipt";
+        _closeReceipt.AutoSize = true;
+        _closeReceipt.Enabled = false;
+        _closeReceipt.Click += async (_, _) => await CloseReceiptAsync();
+        actions.Controls.Add(_closeReceipt);
+
+        root.Controls.Add(actions, 1, row);
+        row++;
+
+        _closeReceiptStatus.AutoSize = true;
+        _closeReceiptStatus.ForeColor = Color.DimGray;
+        _closeReceiptStatus.MaximumSize = new Size(700, 0);
+        root.Controls.Add(_closeReceiptStatus, 1, row);
 
         page.Controls.Add(root);
         return page;
@@ -498,6 +537,13 @@ public sealed class MainForm : Form
             return;
         }
 
+        _closeReceipt.Enabled = false;
+        _closeReceiptStatus.Text = "";
+        _lastTerminal = null;
+        _lastReference = "";
+
+        _cts = new CancellationTokenSource();
+        StartCountdown(TransactionRunner.ResponseTimeoutSeconds(active));
         SetBusy(true, "Checking terminal…");
         try
         {
@@ -506,7 +552,8 @@ public sealed class MainForm : Form
                 terminal,
                 active,
                 request,
-                status => SetBusy(true, status)).ConfigureAwait(true);
+                status => SetBusy(true, status),
+                _cts.Token).ConfigureAwait(true);
 
             switch (outcome)
             {
@@ -514,18 +561,28 @@ public sealed class MainForm : Form
                     ResultForm.ShowInquiry(this, inquired.Inquiry);
                     break;
                 case TransactionOutcome.ResultDone completed:
-                    if (completed.Result is EcrResult.Failed failed
-                        && failed.Recovered is EcrInquiry.Found recovered)
+                    ResultForm.ShowResult(this, completed.Result, request.Type);
+                    if (request.Type.MovesMoney() && TransactionRunner.CanCloseReceipt(terminal))
                     {
-                        ResultForm.ShowInquiry(this, recovered);
-                    }
-                    else
-                    {
-                        ResultForm.ShowResult(this, completed.Result, request.Type);
+                        _lastTerminal = terminal;
+                        _lastReference = completed.Result.MerchantReference;
+                        _closeReceipt.Enabled = true;
                     }
                     break;
                 case TransactionOutcome.Error err:
-                    MessageBox.Show(this, err.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    // Not "Declined": no answer came back, so nobody knows yet.
+                    var message = err.InquirableReference == null
+                        ? err.Message
+                        : err.Message + Environment.NewLine + Environment.NewLine
+                          + "The transaction may have completed. Check before taking payment again — "
+                          + "sending it a second time would charge the cardholder twice."
+                          + Environment.NewLine + "Look it up by merchant reference: " + err.InquirableReference;
+                    MessageBox.Show(
+                        this,
+                        message,
+                        err.InquirableReference == null ? "Not completed" : "Outcome unknown",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
                     break;
             }
         }
@@ -536,16 +593,58 @@ public sealed class MainForm : Form
         }
         finally
         {
+            StopCountdown();
+            _cts?.Dispose();
+            _cts = null;
             SetBusy(false, "Idle");
         }
+    }
+
+    private async Task CloseReceiptAsync()
+    {
+        if (_lastTerminal is not { } terminal) return;
+        _closeReceipt.Enabled = false;
+        var active = _sessions.Resolve(terminal);
+        var message = await TransactionRunner.CloseReceiptAsync(
+            _sessions, terminal, active, _lastReference).ConfigureAwait(true);
+        _closeReceiptStatus.Text = message;
+        AppendLog("[Close receipt] " + message);
+    }
+
+    private void StartCountdown(int totalSeconds)
+    {
+        _totalSeconds = Math.Max(1, totalSeconds);
+        _remainingSeconds = _totalSeconds;
+        _countdownTimer.Start();
+    }
+
+    private void StopCountdown() => _countdownTimer.Stop();
+
+    private void OnCountdownTick()
+    {
+        if (_remainingSeconds > 0) _remainingSeconds--;
+        RenderStatus();
+    }
+
+    private void RenderStatus()
+    {
+        if (!_busy)
+        {
+            _status.Text = _busyStatus;
+            return;
+        }
+        var left = Math.Max(0, _remainingSeconds);
+        _status.Text = $"{_busyStatus}  {left / 60}:{left % 60:D2} remaining of {_totalSeconds} s timeout";
     }
 
     private void SetBusy(bool busy, string status)
     {
         _busy = busy;
+        _busyStatus = status;
         _submit.Enabled = !busy;
-        _status.Text = status;
-        UseWaitCursor = busy;
+        _cancel.Visible = busy;
+        RenderStatus();
+        // Not UseWaitCursor: it would also show a wait cursor over the Cancel button.
     }
 
     private void AppendLog(string message)

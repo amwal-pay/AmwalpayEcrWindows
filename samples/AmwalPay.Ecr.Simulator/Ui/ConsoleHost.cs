@@ -237,8 +237,27 @@ public sealed class ConsoleHost
             return;
         }
 
-        var outcome = await TransactionRunner.ExecuteAsync(
-            _sessions, terminal, active, request, Console.WriteLine).ConfigureAwait(false);
+        // Ctrl+C stops waiting only; it cannot un-send a request.
+        using var cts = new CancellationTokenSource();
+        ConsoleCancelEventHandler onCancel = (_, e) =>
+        {
+            e.Cancel = true;
+            cts.Cancel();
+        };
+        Console.CancelKeyPress += onCancel;
+        Console.WriteLine(
+            $"Waiting up to {TransactionRunner.ResponseTimeoutSeconds(active)} s for the terminal (Ctrl+C stops waiting)…");
+
+        TransactionOutcome outcome;
+        try
+        {
+            outcome = await TransactionRunner.ExecuteAsync(
+                _sessions, terminal, active, request, Console.WriteLine, cts.Token).ConfigureAwait(false);
+        }
+        finally
+        {
+            Console.CancelKeyPress -= onCancel;
+        }
 
         switch (outcome)
         {
@@ -246,17 +265,25 @@ public sealed class ConsoleHost
                 Console.WriteLine(ResultText.FormatInquiry(i.Inquiry));
                 break;
             case TransactionOutcome.ResultDone r:
-                if (r.Result is EcrResult.Failed failed && failed.Recovered is EcrInquiry.Found found)
+                Console.WriteLine(ResultText.FormatResult(r.Result, request.Type));
+                if (request.Type.MovesMoney() && TransactionRunner.CanCloseReceipt(terminal))
                 {
-                    Console.WriteLine(ResultText.FormatInquiry(found));
-                }
-                else
-                {
-                    Console.WriteLine(ResultText.FormatResult(r.Result, request.Type));
+                    Console.Write("Close receipt on the terminal now? [y/N]: ");
+                    if ((Console.ReadLine() ?? "").Trim().StartsWith("y", StringComparison.OrdinalIgnoreCase))
+                    {
+                        Console.WriteLine(await TransactionRunner.CloseReceiptAsync(
+                            _sessions, terminal, active, r.Result.MerchantReference).ConfigureAwait(false));
+                    }
                 }
                 break;
             case TransactionOutcome.Error e:
-                Console.WriteLine("Error: " + e.Message);
+                Console.WriteLine("Not completed: " + e.Message);
+                if (e.InquirableReference != null)
+                {
+                    Console.WriteLine(
+                        "The transaction may have completed. Do not send it again — look it up by merchant reference: "
+                        + e.InquirableReference);
+                }
                 break;
         }
     }

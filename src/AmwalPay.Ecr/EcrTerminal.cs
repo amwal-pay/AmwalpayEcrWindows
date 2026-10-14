@@ -288,6 +288,32 @@ namespace AmwalPay.Ecr
         }
 
         /// <summary>
+        /// Asks the terminal to put its receipt away and go back to its idle screen.
+        /// <para>
+        /// Call from the till’s Close receipt action when the cashier is finished
+        /// with the result — not as a side effect of dismissing the dialog.
+        /// </para>
+        /// A terminal too old to know the request answers
+        /// <see cref="EcrReceiptClosed.Refused"/>. Treat that as "cannot be asked"
+        /// and carry on; the receipt stays up and somebody presses back, as it did
+        /// before.
+        /// </summary>
+        /// <param name="merchantReference">The till's own reference for the request.</param>
+        public async Task<EcrReceiptClosed> CloseReceiptAsync(
+            string merchantReference = "",
+            CancellationToken cancellationToken = default)
+        {
+            var message = Build(
+                EcrTransactionType.CloseReceipt,
+                merchantReference: merchantReference);
+
+            var answer = await ExchangeAsync(message, cancellationToken).ConfigureAwait(false);
+            return answer.Failure != null
+                ? new EcrReceiptClosed.Failed(message.MerchantReference, answer.Failure)
+                : answer.Json!.ToReceiptClosed(message.MerchantReference);
+        }
+
+        /// <summary>
         /// Runs any operation that moves money. The typed methods above are the
         /// usual way in; this is for a caller driving the type from its own UI.
         /// <see cref="EcrTransactionType.Inquiry"/> is not accepted here — it

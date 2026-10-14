@@ -66,6 +66,23 @@ namespace AmwalPay.Ecr.WebService
         string TransactionDateTime = "",
         string OriginalMerchantReference = "") : IEcrWebServiceRequest;
 
+    /// <summary>
+    /// Hub <c>/Ecr/closeReceipt</c> — send from the till’s Close receipt action.
+    /// <para>
+    /// <paramref name="OriginalMerchantReference"/> is the money-moving operation's
+    /// reference; <paramref name="MerchantReference"/> is this close request's own id
+    /// (blank → SDK generates).
+    /// </para>
+    /// </summary>
+    public sealed record EcrWebServiceCloseReceiptRequest(
+        long MerchantId,
+        long TerminalId,
+        string TerminalSerial,
+        string OriginalMerchantReference,
+        string MerchantReference = "",
+        string EcrId = "ECR01",
+        string TransactionDateTime = "") : IEcrWebServiceRequest;
+
     /// <summary>Builds and signs JSON bodies for Ecr Web Service endpoints.</summary>
     public static class EcrWebServiceRequestJson
     {
@@ -128,5 +145,16 @@ namespace AmwalPay.Ecr.WebService
         /// <inheritdoc cref="TransactionStatus"/>
         public static JsonObject Inquiry(EcrWebServiceTransactionStatusRequest request, string secureHashKey = "") =>
             TransactionStatus(request, secureHashKey);
+
+        public static JsonObject CloseReceipt(EcrWebServiceCloseReceiptRequest request, string secureHashKey = "") =>
+            EcrWebServiceMessage.BuildCloseReceipt(
+                merchantId: request.MerchantId,
+                terminalId: request.TerminalId,
+                terminalSerial: request.TerminalSerial,
+                secureHashKey: secureHashKey,
+                ecrId: request.EcrId,
+                merchantReference: request.MerchantReference,
+                originalMerchantReference: request.OriginalMerchantReference,
+                transactionDateTime: request.TransactionDateTime).Json;
     }
 }

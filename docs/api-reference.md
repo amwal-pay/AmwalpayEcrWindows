@@ -1,47 +1,48 @@
 # API reference
 
-Every public type in `AmwalPay.Ecr` and `AmwalPay.Ecr.WebService` for **package
-1.0.0**. Everything else — the `Internal` namespace, the HTTP client, the routes,
-the signing helpers — is `internal`, so this is the whole surface: nothing else
-is visible to you, and nothing here changes without a version bump.
+Every public type in `AmwalPay.Ecr` and `AmwalPay.Ecr.WebService`, for package
+**1.0.2**. Everything else (the `Internal` namespace, the HTTP client, routes and
+signing helpers) is `internal`. For how to use these together, see the
+[integration guide](integration-guide.md).
 
 **Conventions**
 
-- Every operation is `async` and returns a `Task<T>`. Names end in `Async`.
+- Operations are `async` and return `Task<T>`; names end in `Async`.
 - Every asynchronous method takes a trailing `CancellationToken cancellationToken = default`.
-  Cancelling stops the wait, **not** the transaction — see
-  [Threading and lifecycle](integration-guide.md#12-threading-and-lifecycle).
+  Cancelling stops the wait, **not** the transaction; see
+  [Threading and lifecycle](integration-guide.md#9-threading-and-lifecycle).
 - Amounts you send are `decimal`. Amounts you receive are `string`s in major units,
   invariant culture (`"1.234"`).
-- Results, links, plans and config are `record`s, so they compare by value and
-  support `with`. **Use C# 9 or later** (see [Compatibility](compatibility.md#c-9-or-later)).
-- Nullable reference types are enabled; `?` in a signature means "may be null".
-- Argument mistakes throw `ArgumentException` (raised on `await` for the `async`
-  methods, before a connection is opened). Runtime problems become results.
+- Results, links, plans and config are `record`s (value equality, `with`). Use
+  **C# 9 or later**.
+- Nullable reference types are enabled; `?` means "may be null".
+- Argument mistakes throw `ArgumentException` (raised on `await`, before a connection
+  is opened). Runtime problems become results.
 
 **Contents**
 
-- [EcrSessions](#ecrsessions) — validate config and build clients
-- [EcrLink](#ecrlink) — how you reach a terminal
-- [EcrSessionPlan](#ecrsessionplan) — validated plan for one terminal
-- [EcrOpenedSession](#ecropenedsession) — one client over any link
-- [EcrTerminal](#ecrterminal) — LAN / Wi‑Fi / USB client
-- [EcrWebServiceTerminal](#ecrwebserviceterminal) — HTTPS REST client
-- [EcrConfig](#ecrconfig) — identity, currency, timeouts, signing
-- [EcrEnvironment](#ecrenvironment) — Hub deployment (Web Service)
-- [Merchant reference](#merchant-reference) — naming a transaction as your system does
-- [EcrTransactionType](#ecrtransactiontype) — what each operation needs
-- [EcrResult](#ecrresult) — how a transaction ended
-- [EcrInquiry](#ecrinquiry) / [EcrTransaction](#ecrtransaction) — what became of one
-- [EcrReceipt](#ecrreceipt) — the e-receipt
-- [Failure](#failure) — why an exchange did not complete
-- [NextStep](#nextstep) — what to do after a decline or failure
-- [EcrReachability](#ecrreachability) — probe result
-- [IEcrChannel](#iecrchannel) / [TcpEcrChannel](#tcpecrchannel) / [EcrChannelTimeout](#ecrchanneltimeout) / [EcrFrames](#ecrframes) — transports
-- [IEcrLogger and EcrLogger](#iecrlogger-and-ecrlogger) — diagnostics
-- [EcrWireResponse](#ecrwireresponse) — the parsed response envelope
-- [Web Service request types](#web-service-request-types) — `AmwalPay.Ecr.WebService`
-- [Appendix: Kotlin → C# name map](#appendix-kotlin--c-name-map)
+- [EcrSessions](#ecrsessions)
+- [EcrLink](#ecrlink)
+- [EcrSessionPlan](#ecrsessionplan)
+- [EcrOpenedSession](#ecropenedsession)
+- [EcrTerminal](#ecrterminal)
+- [EcrWebServiceTerminal](#ecrwebserviceterminal)
+- [Merchant reference](#merchant-reference)
+- [EcrConfig](#ecrconfig)
+- [EcrEnvironment](#ecrenvironment)
+- [EcrTransactionType](#ecrtransactiontype)
+- [EcrResult](#ecrresult)
+- [EcrInquiry](#ecrinquiry) and [EcrTransaction](#ecrtransaction)
+- [EcrReceipt](#ecrreceipt)
+- [EcrReceiptClosed](#ecrreceiptclosed)
+- [Failure](#failure)
+- [NextStep](#nextstep)
+- [EcrReachability](#ecrreachability)
+- [IEcrChannel](#iecrchannel), [TcpEcrChannel](#tcpecrchannel), [EcrChannelTimeout](#ecrchanneltimeout), [EcrFrames](#ecrframes)
+- [IEcrLogger and EcrLogger](#iecrlogger-and-ecrlogger)
+- [EcrWireResponse](#ecrwireresponse)
+- [Web Service request types](#web-service-request-types)
+- [Appendix: Android SDK name differences](#appendix-android-sdk-name-differences)
 
 ---
 
@@ -51,9 +52,8 @@ is visible to you, and nothing here changes without a version bump.
 public static class EcrSessions
 ```
 
-Validates an [EcrLink](#ecrlink) and [EcrConfig](#ecrconfig), then builds the
-right client. Intended so integrators do not duplicate transport rules, signing-key
-labels, or merchant/terminal ID checks in application code.
+Validates an [EcrLink](#ecrlink) and [EcrConfig](#ecrconfig), then builds the right
+client, so apps do not duplicate transport rules, key labels or ID checks.
 
 ### Plan
 
@@ -64,25 +64,21 @@ public static EcrSessionPlan Plan(
     string? rawSecureHashKey = null)
 ```
 
-Validates without opening a connection. Returns an [EcrSessionPlan](#ecrsessionplan)
-whose `Issues` list describes anything missing — blank IP, non-numeric merchant ID,
-invalid hex key, empty signing key — rather than throwing.
+Validates without opening a connection and returns an
+[EcrSessionPlan](#ecrsessionplan) whose `Issues` list describes anything wrong
+(blank IP, non-numeric merchant ID, malformed or missing key) instead of throwing.
 
-Pass `rawSecureHashKey` when the user entered a key that might fail
-`EcrConfig`'s property setter (odd length, non-hex). It defaults to
-`config.SecureHashKey`. The plan reports the problem and sanitizes the key to
-empty so you can still show other issues. The key is trimmed. This is the **same**
-typed string, not a second secret — apps normally keep two mode-specific keys in
-settings (Wi‑Fi/LAN vs Web Service) and pass only the one for the selected mode.
-
-For [EcrLink.Lan](#ecrlink), the resolved config's `Port` comes from the link.
-For [EcrLink.WebService](#ecrlink), `MerchantId` and `TerminalId` on the config
-are taken from the link so they cannot drift.
-
-**A missing key is always an issue**, for every link — `"Wi-Fi/LAN secure hash key
-is not configured"` or `"Web Service secure hash key is not configured"` — so a
-plan with no key is never ready. Build `EcrTerminal` directly if you deliberately
-need an unsigned client (test code only).
+- `rawSecureHashKey` is a key the user typed that might fail `EcrConfig`'s setter
+  (odd length, non-hex). It defaults to `config.SecureHashKey`, is trimmed, and when
+  invalid is reported as an issue and sanitised to empty. It is the same secret, not a
+  second one.
+- For [EcrLink.Lan](#ecrlink), the resolved config's `Port` comes from the link.
+- For [EcrLink.WebService](#ecrlink), `MerchantId` and `TerminalId` are copied from
+  the link, and a `ResponseTimeout` still at the 120 s default is raised to
+  `EcrConfig.WebServiceResponseTimeout` (130 s). Any other value is kept.
+- **A missing key is always an issue**, for every link (`"Wi-Fi/LAN secure hash key
+  is not configured"` or `"Web Service secure hash key is not configured"`), so a
+  plan with no key is never ready.
 
 **Throws** `ArgumentNullException` if `link` or `config` is null.
 
@@ -96,72 +92,28 @@ public static EcrOpenedSession Open(
     IEcrLogger? logger = null)
 ```
 
-Opens the transport `plan` describes — LAN, USB cable or Web Service — and returns
-an [EcrOpenedSession](#ecropenedsession). One dispatch, so callers and recovery
-paths cannot diverge on which client they build.
+Opens the transport `plan` describes (LAN, USB cable or Web Service) and returns an
+[EcrOpenedSession](#ecropenedsession). `usbChannel` is required for a USB plan and
+ignored otherwise; the package ships no USB channel.
 
-`usbChannel` is required when `plan.UsesUsbCable` and ignored otherwise. **The
-package ships no USB channel** — the factory returns yours.
+**Throws** `ArgumentException` if `plan.IsReady` is false; `InvalidOperationException`
+for a USB plan with no factory (or a factory that returns null).
 
-**Throws** `ArgumentException` if `plan.IsReady` is false;
-`InvalidOperationException` for a USB plan with no factory (or a factory that
-returns null).
-
-### LanTerminal
+### LanTerminal, UsbCableTerminal, WebServiceTerminal
 
 ```csharp
-public static EcrTerminal LanTerminal(
-    string terminalSerial,
-    EcrSessionPlan plan,
-    IEcrLogger? logger = null)
+public static EcrTerminal LanTerminal(string terminalSerial, EcrSessionPlan plan, IEcrLogger? logger = null)
+public static EcrTerminal UsbCableTerminal(string terminalSerial, EcrSessionPlan plan, IEcrChannel channel, IEcrLogger? logger = null)
+public static EcrWebServiceTerminal WebServiceTerminal(string terminalSerial, EcrSessionPlan plan, IEcrLogger? logger = null)
 ```
 
-Builds a LAN client. `plan` must be for a LAN link (`plan.UsesLan == true`),
-otherwise `ArgumentException`.
+Each requires a plan for its own link (`UsesLan`, `UsesUsbCable`, `UsesWebService`),
+otherwise `ArgumentException`. Above the channel, `UsbCableTerminal` is identical to
+`LanTerminal`: the same signing, messages and answers.
 
-### UsbCableTerminal
-
-```csharp
-public static EcrTerminal UsbCableTerminal(
-    string terminalSerial,
-    EcrSessionPlan plan,
-    IEcrChannel channel,
-    IEcrLogger? logger = null)
-```
-
-Builds a client that talks through a channel you supply. `plan` must be for
-`EcrLink.UsbCable`, otherwise `ArgumentException`. Everything above the channel is
-identical to `LanTerminal`: the same signing, the same messages, the same answers.
-
-### WebServiceTerminal
-
-```csharp
-public static EcrWebServiceTerminal WebServiceTerminal(
-    string terminalSerial,
-    EcrSessionPlan plan,
-    IEcrLogger? logger = null)
-```
-
-Builds a Web Service client. `plan` must be for Web Service
-(`plan.UsesWebService == true`), otherwise `ArgumentException`.
-
-**Initialization order**
-
-1. Collect serial, numeric merchant/terminal IDs, `EcrEnvironment`, and the
-   **Web Service** secure hash key (not the LAN key).
-2. `EcrSessions.Plan(new EcrLink.WebService(merchantId, terminalId), config, rawKey)`.
-3. If `!plan.IsReady`, show `plan.Issues` and stop.
-4. Call `WebServiceTerminal(serial, plan)` **or** `Open(serial, plan)` for a
-   mode-agnostic [EcrOpenedSession](#ecropenedsession).
-5. Call `SaleAsync` / `VoidAsync` / `RefundAsync` / `InquireAsync` /
-   `InquireByReferenceAsync` — the Hub is contacted only then.
-
-See the [integration guide §4](integration-guide.md#initialization-process) for
-Hub URLs, TLS, and recovery after a lost answer.
-
-> **`LanTerminal`, `UsbCableTerminal` and `WebServiceTerminal` do not check
-> `plan.IsReady`; only `Open` does.** A plan that is not ready may carry an empty
-> key, which builds an _unsigned_ terminal. Always test `plan.IsReady` first.
+> **None of these three check `plan.IsReady`; only `Open` does.** A plan that is not
+> ready may carry an empty key, which builds an unsigned terminal. Test
+> `plan.IsReady` first.
 
 ---
 
@@ -176,36 +128,15 @@ public abstract record EcrLink
 }
 ```
 
-How this till reaches a POS terminal. The app supplies addressing; the SDK owns
-protocol, signing, and transport. The hierarchy is closed — only these three
-exist — so match on it with `switch`/`is`.
+How this till reaches a terminal. The hierarchy is closed: only these three exist.
 
-### EcrLink.Lan
-
-Wi‑Fi / LAN — TCP to `Host`:`Port` (default 9100).
-
-### EcrLink.UsbCable
-
-A cable straight from the till to the terminal, carrying no IP. Nothing to
-configure — so nothing to carry — because the cable is found by looking at what is
-plugged in, by the [IEcrChannel](#iecrchannel) you supply. Construct it with
-`new EcrLink.UsbCable()`.
-
-**The C# package ships no USB channel.** Build the terminal with
-[EcrSessions.UsbCableTerminal](#usbcableterminal) or
-[EcrSessions.Open](#open), passing an `IEcrChannel` for your hardware, and frame
-with [EcrFrames](#ecrframes).
-
-### EcrLink.WebService
-
-Hosted REST — HTTPS with JSON body signing. Hub URLs are resolved inside the SDK
-from [EcrConfig.Environment](#ecrconfig); the app does not configure base URLs.
-`MerchantId` and `TerminalId` must be numeric strings. Construct with
-`new EcrLink.WebService(MerchantId: "13593", TerminalId: "101311")`.
-
-`EcrSessions.Plan` copies those IDs onto the resolved [EcrConfig](#ecrconfig) and
-requires a non-empty Web Service secure hash key before `IsReady` is true. Full
-init steps: [integration guide](integration-guide.md#initialization-process).
+- **`Lan`**: TCP to `Host`:`Port` (default 9100).
+- **`UsbCable`**: a cable with no address. Construct with `new EcrLink.UsbCable()` and
+  build the terminal with [UsbCableTerminal](#lanterminal-usbcableterminal-webserviceterminal)
+  or [Open](#open), passing an [IEcrChannel](#iecrchannel) for your hardware.
+- **`WebService`**: HTTPS REST to the Amwal Hub. `MerchantId` and `TerminalId` must be
+  numeric strings. Hub URLs come from [EcrConfig.Environment](#ecrconfig); the app
+  does not configure them.
 
 ---
 
@@ -218,17 +149,17 @@ public sealed record EcrSessionPlan(
     IReadOnlyList<string>? Issues = null)
 ```
 
-Validated SDK configuration for one terminal link, built by
+Validated configuration for one terminal link, built by
 [EcrSessions.Plan](#plan).
 
-| Property                                           | Description                                                                                                                      |
-| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `IReadOnlyList<string> Issues`                     | What is wrong, or empty. Never null                                                                                              |
-| `bool IsReady`                                     | `Issues.Count == 0` — safe to send                                                                                               |
-| `bool UsesLan` / `UsesWebService` / `UsesUsbCable` | Which client to build                                                                                                            |
-| `string SigningKeyLabel`                           | Human label for the missing-key issue — Wi‑Fi/LAN vs Web Service                                                                 |
-| `bool SigningKeyConfigured`                        | Whether a non-empty key is present                                                                                               |
-| `string ConnectionSummary`                         | Operator-facing summary with **no secrets** — e.g. `192.168.1.50:9100`, `USB cable`, or `UAT · merchant 13593 · terminal 101311` |
+| Property | Description |
+|---|---|
+| `IReadOnlyList<string> Issues` | What is wrong, or empty. Never null |
+| `bool IsReady` | `Issues.Count == 0` |
+| `bool UsesLan` / `UsesWebService` / `UsesUsbCable` | Which client to build |
+| `string SigningKeyLabel` | Label used in the missing-key issue: Wi-Fi/LAN vs Web Service |
+| `bool SigningKeyConfigured` | Whether a non-empty key is present |
+| `string ConnectionSummary` | Operator-facing, no secrets: `192.168.1.50:9100`, `USB cable`, or `UAT · merchant 13593 · terminal 101311` |
 
 ---
 
@@ -238,50 +169,51 @@ Validated SDK configuration for one terminal link, built by
 public sealed class EcrOpenedSession
 ```
 
-One opened transport for a validated plan, from [EcrSessions.Open](#open). It
-exposes one set of calls whichever transport is behind it, **but it is not a
-lowest-common-denominator you can ignore** — several arguments only mean
-something on one transport. It has no public constructor.
+One opened transport for a validated plan, from [EcrSessions.Open](#open). It has no
+public constructor. It exposes one set of calls whichever transport is behind it, but
+several arguments only mean something on one transport.
 
-| Member                   | Description                                                         |
-| ------------------------ | ------------------------------------------------------------------- |
-| `EcrSessionPlan Plan`    | The plan it was opened from                                         |
-| `bool UsesLocalTerminal` | LAN or USB cable (an `EcrTerminal` is behind it)                    |
-| `bool UsesWebService`    | An `EcrWebServiceTerminal` is behind it                             |
-| `bool SupportsReceipt`   | `UsesLocalTerminal` — receipt URLs exist only on the local protocol |
+| Member | Description |
+|---|---|
+| `EcrSessionPlan Plan` | The plan it was opened from |
+| `bool UsesLocalTerminal` | LAN or USB cable (an `EcrTerminal` is behind it) |
+| `bool UsesWebService` | An `EcrWebServiceTerminal` is behind it |
+| `bool SupportsReceipt` | Same as `UsesLocalTerminal`: receipt URLs exist only on the local protocol |
 
 ```csharp
 public Task<EcrReachability?> ProbeReachabilityAsync(CancellationToken cancellationToken = default)
-
 public Task<EcrResult> SaleAsync(decimal amount, string merchantReference = "", CancellationToken cancellationToken = default)
-
 public Task<EcrResult> VoidAsync(string receiptNumber, string originalTerminalId = "", string merchantReference = "", CancellationToken cancellationToken = default)
-
 public Task<EcrResult> RefundAsync(decimal amount, string receiptNumber, string transactionDate, string originalTerminalId = "", string merchantReference = "", CancellationToken cancellationToken = default)
-
 public Task<EcrInquiry> InquireAsync(string receiptNumber, string transactionDate, string originalTerminalId = "", CancellationToken cancellationToken = default)
-
 public Task<EcrInquiry> InquireByReferenceAsync(string originalReference, string transactionDate = "", string originalTerminalId = "", string merchantReference = "", CancellationToken cancellationToken = default)
-
 public Task<EcrReceipt> ReceiptAsync(string receiptNumber, string transactionDate, string originalTerminalId = "", CancellationToken cancellationToken = default)
+public Task<EcrReceiptClosed> CloseReceiptAsync(string merchantReference = "", string originalMerchantReference = "", CancellationToken cancellationToken = default)
 ```
 
 Differences to know:
 
-- **`ProbeReachabilityAsync` returns `null` on Web Service** — there is no probe.
-- **`originalTerminalId` is ignored on Web Service** (void, refund, inquire, by
-  reference). It is passed through on LAN/USB. Check `UsesLocalTerminal` before
-  relying on it.
-- **`ReceiptAsync` on Web Service** does not call anything; it returns
-  `EcrReceipt.Unavailable` with an empty `MerchantReference`, an empty `Raw` and
-  the reason `"Receipt fetch is only supported over Wi‑Fi and USB cable ECR"`.
-- **`InquireByReferenceAsync` on Web Service** reaches
-  [EcrWebServiceTerminal.InquireByReferenceAsync](#inquirebyreferenceasync-1)
-  and looks the transaction up by `originalMerchantReference` (empty `stan`).
-- **`InquireAsync` and `ReceiptAsync` here take no `merchantReference`**, unlike
-  `EcrTerminal`'s. The fourth positional argument is the `CancellationToken`, not a
-  reference — use named arguments.
-- There is no `RunAsync`. Use the typed methods.
+- **`ProbeReachabilityAsync` returns `null` on Web Service**; there is no probe.
+- **`originalTerminalId` is ignored on Web Service** (void, refund, inquiry). Check
+  `UsesLocalTerminal` before relying on it.
+- **`ReceiptAsync` on Web Service** calls nothing and returns `EcrReceipt.Unavailable`
+  with an empty `MerchantReference` and `Raw`, reason `"Receipt fetch is only
+  supported over Wi-Fi and USB cable ECR"`.
+- **`InquireByReferenceAsync` on Web Service** looks up by `originalMerchantReference`
+  with an empty `stan`. `originalReference` is the transaction being looked up;
+  `merchantReference` is the inquiry's own id, kept separate.
+- **`InquireAsync` and `ReceiptAsync` take no `merchantReference`** here, unlike
+  `EcrTerminal`'s. The fourth positional argument is the `CancellationToken`; use
+  named arguments.
+- **`CloseReceiptAsync`** (1.0.2): on LAN / USB it sends `CLOSE_RECEIPT` and
+  `originalMerchantReference` is ignored. On Web Service it posts `/Ecr/closeReceipt`
+  and needs `originalMerchantReference` (the sale / void / refund reference). If only
+  `merchantReference` is given on Web Service it is treated as the original and the
+  SDK generates a fresh id for the close request. If neither is given the result is
+  `EcrReceiptClosed.Failed` with `Failure.Malformed` and nothing is sent. **The
+  argument order differs from `EcrWebServiceTerminal.CloseReceiptAsync`**; use named
+  arguments.
+- There is no `RunAsync`.
 
 ---
 
@@ -291,251 +223,141 @@ Differences to know:
 public sealed class EcrTerminal
 ```
 
-A POS terminal reachable over the network — or any link an [IEcrChannel](#iecrchannel)
-can carry. One instance addresses one terminal; it holds no connection between
-calls, so it is cheap to keep and safe to reuse and to share across threads.
+A terminal reachable over the network, or over any link an
+[IEcrChannel](#iecrchannel) can carry. One instance addresses one terminal, holds no
+connection between calls, and is safe to share across threads.
 
 ### Constructors
 
 ```csharp
-public EcrTerminal(
-    IEcrChannel channel,
-    string serialNumber = "",
-    EcrConfig? config = null,
-    IEcrLogger? logger = null)
-
-public EcrTerminal(
-    string host,
-    string serialNumber = "",
-    EcrConfig? config = null,
-    IEcrLogger? logger = null)
+public EcrTerminal(IEcrChannel channel, string serialNumber = "", EcrConfig? config = null, IEcrLogger? logger = null)
+public EcrTerminal(string host, string serialNumber = "", EcrConfig? config = null, IEcrLogger? logger = null)
 ```
 
-The second builds a [TcpEcrChannel](#tcpecrchannel) for `host` using
-`config.Port` and `config.ConnectTimeout`, and hands it to the first.
+The second builds a [TcpEcrChannel](#tcpecrchannel) for `host` using `config.Port` and
+`config.ConnectTimeout`. `serialNumber` is what the operator registered; the terminal
+shows its own address on screen. `config` defaults to `new EcrConfig()`.
 
-| Parameter      | Description                                                                                                                |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `channel`      | How bytes reach the terminal. A socket, a USB cable, anything that can carry one request and bring back one answer         |
-| `host`         | The terminal's address on the local network                                                                                |
-| `serialNumber` | Identifies the terminal in the message. The terminal shows its own address on screen; this is what the operator registered |
-| `config`       | Identity, currency, timeouts and signing key. Defaults to `new EcrConfig()`. See [EcrConfig](#ecrconfig)                   |
-| `logger`       | Where diagnostics go. Silent by default                                                                                    |
-
-Every method is asynchronous, never blocks the calling thread, and uses
-`ConfigureAwait(false)` internally, so it is safe to `await` from a UI thread.
-
-### IsReachableAsync
+### IsReachableAsync and ProbeReachabilityAsync
 
 ```csharp
 public Task<bool> IsReachableAsync(CancellationToken cancellationToken = default)
-```
-
-Whether the terminal is listening. Equivalent to `ProbeReachabilityAsync().Reachable`.
-
-### ProbeReachabilityAsync
-
-```csharp
 public Task<EcrReachability> ProbeReachabilityAsync(CancellationToken cancellationToken = default)
 ```
 
-Asks the channel whether the terminal is there, before sending anything, waiting up
-to `config.ProbeTimeout`. For TCP that is a handshake to `host:config.Port`.
-Returns reachability plus the platform error message when the probe fails
-(`connection refused`, timed out, …). Prefer this over `IsReachableAsync()` when
-you need to show _why_ the till cannot reach the terminal.
-
-```csharp
-EcrReachability probe = await terminal.ProbeReachabilityAsync();
-if (!probe.Reachable)
-{
-    screen.Show($"{probe.Endpoint} — {probe.Error}");
-}
-```
+Ask the channel whether the terminal is there before sending anything, waiting up to
+`config.ProbeTimeout`. For TCP that is a handshake to `host:config.Port`.
+`ProbeReachabilityAsync` also returns the platform error when the probe fails. A probe
+proves the port is open, not that the terminal is idle.
 
 ### SaleAsync
 
 ```csharp
-public Task<EcrResult> SaleAsync(
-    decimal amount,
-    string merchantReference = "",
-    CancellationToken cancellationToken = default)
+public Task<EcrResult> SaleAsync(decimal amount, string merchantReference = "", CancellationToken cancellationToken = default)
 ```
 
-Takes a payment. The cardholder presents their card at the terminal.
-
-Completes when the terminal answers — normally seconds, occasionally the full
-`ResponseTimeout`.
-
-```csharp
-var result = await terminal.SaleAsync(1.234m);
-
-// Or, naming the sale with your own order number:
-var named = await terminal.SaleAsync(1.234m, merchantReference: "ORD-88231");
-```
-
-| Parameter           | Description                                                                                                      |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `amount`            | How much to take. Rounded to `config.MinorUnitDigits` places (away from zero at the midpoint). Not range-checked |
-| `merchantReference` | Your own reference for this sale. See [Merchant reference](#merchant-reference)                                  |
-
-> Use the `m` suffix: `1.234m`. A `double` does not compile as an argument, and a
-> `double` cast to `decimal` is already imprecise before the SDK sees it.
+Takes a payment; the cardholder presents their card. Completes when the terminal
+answers: normally seconds, at most `ResponseTimeout`. `amount` is rounded to
+`config.MinorUnitDigits` places (away from zero at the midpoint) and not
+range-checked. Use the `m` suffix: `1.234m`.
 
 ### VoidAsync
 
 ```csharp
-public Task<EcrResult> VoidAsync(
-    string receiptNumber,
-    string originalTerminalId = "",
-    string merchantReference = "",
-    CancellationToken cancellationToken = default)
+public Task<EcrResult> VoidAsync(string receiptNumber, string originalTerminalId = "", string merchantReference = "", CancellationToken cancellationToken = default)
 ```
 
-Cancels an earlier transaction **in full**, by the receipt number printed on it.
-
-No amount: a void returns exactly what the original took, and only the terminal
-knows that figure. No card is presented for a transaction taken on the same
-terminal — the terminal holds the original's details — so it completes in about
-a second.
-
-| Parameter            | Description                                                                                                                   |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `receiptNumber`      | The original's receipt number. `"215"`; padding is applied for you                                                            |
-| `originalTerminalId` | The terminal the original was taken on, when not this one                                                                     |
-| `merchantReference`  | Your own reference for the **void**. It names the cancellation, not the transaction being cancelled — that is `receiptNumber` |
-
-Refusals — original not found, outside the void window, not voidable — arrive as
-`EcrResult.Declined` with the reason. Nothing reached the backend, so no money
-moved.
+Cancels an earlier transaction **in full**, by the receipt number printed on it. No
+amount, and no card for a transaction taken on this terminal. `originalTerminalId` is
+the terminal the original was taken on, when not this one. `merchantReference` names
+the void, not the transaction cancelled. Refusals (not found, outside the void
+window, not voidable) arrive as `Declined`.
 
 **Throws** `ArgumentException` if `receiptNumber` is blank.
 
 ### RefundAsync
 
 ```csharp
-public Task<EcrResult> RefundAsync(
-    decimal amount,
-    string receiptNumber,
-    string transactionDate,
-    string originalTerminalId = "",
-    string merchantReference = "",
-    CancellationToken cancellationToken = default)
+public Task<EcrResult> RefundAsync(decimal amount, string receiptNumber, string transactionDate, string originalTerminalId = "", string merchantReference = "", CancellationToken cancellationToken = default)
 ```
 
-Returns money against an earlier transaction, in full or in part. **The cardholder
-presents their card** to receive it.
-
-| Parameter            | Description                                                                                                    |
-| -------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `amount`             | How much to return                                                                                             |
-| `receiptNumber`      | The original's receipt number                                                                                  |
-| `transactionDate`    | The day the original was taken, `yyyyMMdd`. Required — a receipt number is only unique within a terminal's day |
-| `originalTerminalId` | The terminal the original was taken on, when not this one                                                      |
-| `merchantReference`  | Your own reference for the **refund**                                                                          |
-
-```csharp
-await terminal.RefundAsync(0.500m, receiptNumber: "208", transactionDate: "20260809");
-```
+Returns money against an earlier transaction, in full or in part. The cardholder
+presents their card. `transactionDate` is the day the original was taken
+(`yyyyMMdd`), required because a receipt number is only unique within a terminal's
+day.
 
 **Throws** `ArgumentException` if `receiptNumber` is blank.
 
 ### InquireAsync
 
 ```csharp
-public Task<EcrInquiry> InquireAsync(
-    string receiptNumber,
-    string transactionDate,
-    string originalTerminalId = "",
-    string merchantReference = "",
-    CancellationToken cancellationToken = default)
+public Task<EcrInquiry> InquireAsync(string receiptNumber, string transactionDate, string originalTerminalId = "", string merchantReference = "", CancellationToken cancellationToken = default)
 ```
 
-Asks what became of an earlier transaction, without touching it.
-
-Nothing is authorised and no card is presented, so this is safe to repeat and the
-terminal answers it **even while taking a payment** — which is when a till most
-needs it. After a `Failure.Timeout`, this is how to find out what happened
-instead of retrying and risking a second charge.
-
-`merchantReference` names the _inquiry itself_, not the transaction — it is not a
-way to look one up (that is `InquireByReferenceAsync`).
+Asks what became of an earlier transaction without touching it. Safe to repeat and
+answered **even while the terminal is taking a payment**. `merchantReference` names
+the inquiry itself; it is not a way to look a transaction up.
 
 **Throws** `ArgumentException` if `receiptNumber` is blank.
 
 ### InquireByReferenceAsync
 
 ```csharp
-public Task<EcrInquiry> InquireByReferenceAsync(
-    string originalReference,
-    string transactionDate = "",
-    string originalTerminalId = "",
-    string merchantReference = "",
-    CancellationToken cancellationToken = default)
+public Task<EcrInquiry> InquireByReferenceAsync(string originalReference, string transactionDate = "", string originalTerminalId = "", string merchantReference = "", CancellationToken cancellationToken = default)
 ```
 
-Looks up a transaction by the **merchant reference** from an earlier sale rather
-than by receipt number. Useful after `Failure.Timeout`, `ConnectionLost` or
-`Unauthenticated` when you stored `result.MerchantReference` but do not have a
-receipt number — the receipt number arrives _in_ the answer, so a lost answer
-leaves you without one.
+Looks up a transaction by the merchant reference it was sent with. This is the answer
+to an outcome you never received: a receipt number arrives *in* the terminal's answer,
+so a lost answer leaves you without one. `transactionDate` is optional because a
+reference is not scoped to a day.
 
-`transactionDate` is optional here: a reference is not scoped to a day the way a
-receipt number is. `merchantReference` names the inquiry itself; `originalReference`
-is the transaction being looked up.
-
-**Throws** `ArgumentException` if `originalReference` is blank (or breaks the
-[reference rules](#merchant-reference)).
+**Throws** `ArgumentException` if `originalReference` is blank or breaks the
+[reference rules](#merchant-reference).
 
 ### ReceiptAsync
 
 ```csharp
-public Task<EcrReceipt> ReceiptAsync(
-    string receiptNumber,
-    string transactionDate,
-    string originalTerminalId = "",
-    string merchantReference = "",
-    CancellationToken cancellationToken = default)
+public Task<EcrReceipt> ReceiptAsync(string receiptNumber, string transactionDate, string originalTerminalId = "", string merchantReference = "", CancellationToken cancellationToken = default)
 ```
 
-Fetches an earlier transaction's e-receipt, as a URL to put in a QR code. The
-customer scans it and reads the receipt on their own phone, so a till with no
-printer can still hand one over.
-
-Non-financial and reprintable — ask as often as you like.
+Fetches an earlier transaction's e-receipt as a URL for a QR code. Non-financial and
+reprintable.
 
 **Throws** `ArgumentException` if `receiptNumber` is blank.
+
+### CloseReceiptAsync
+
+```csharp
+public Task<EcrReceiptClosed> CloseReceiptAsync(string merchantReference = "", CancellationToken cancellationToken = default)
+```
+
+*Requires 1.0.2.* Asks the terminal to put its receipt away and return to idle
+(`CLOSE_RECEIPT`). Call it from the till's explicit Close receipt action, not as a
+side effect of dismissing a dialog. A terminal too old to know the request answers
+`EcrReceiptClosed.Refused`; treat that as "cannot be asked" and carry on. Safe to
+repeat. `merchantReference` is the request's own id (generated when blank).
 
 ### RunAsync
 
 ```csharp
-public Task<EcrResult> RunAsync(
-    EcrTransactionType type,
-    decimal? amount = null,
-    string originalStan = "",
-    string originalTerminalId = "",
-    string originalDate = "",
-    string merchantReference = "",
-    CancellationToken cancellationToken = default)
+public Task<EcrResult> RunAsync(EcrTransactionType type, decimal? amount = null, string originalStan = "", string originalTerminalId = "", string originalDate = "", string merchantReference = "", CancellationToken cancellationToken = default)
 ```
 
-Runs any operation that moves money. The typed methods above are the usual way
-in; this is for a caller driving the type from its own UI.
+Runs any operation that moves money, for a caller driving the type from its own UI.
 
-**Throws** `ArgumentException` when the type needs something that is missing (an
-amount, a receipt number), or when given `Inquiry` or `Receipt` — those answer with
-something they found rather than something they performed, so they have their own
-methods. (The exception message for those two says "is run with inquire()"; the
-methods are `InquireAsync` and `ReceiptAsync`.)
+**Throws** `ArgumentException` when the type needs something missing (an amount, a
+receipt number), or when given `Inquiry`, `Receipt` or `CloseReceipt`, which answer
+with something found or acknowledged and have their own methods. (The message for
+those says "is run with inquire()".)
 
-### What the SDK does when an answer is lost
+### When an answer is lost
 
 For `SaleAsync`, `VoidAsync`, `RefundAsync` and `RunAsync`, a lost exchange becomes
 `EcrResult.Failed`. When [EcrConfig.AutoInquireOnFailure](#ecrconfig) is `true`, the
-failure is one where `Failure.OutcomeUnknown` is true, and a reference exists, the
-SDK then makes one `InquireByReferenceAsync` call and attaches the finding as
-`Failed.Recovered`. A `CancellationToken` cancellation is never turned into a
-result: it throws `OperationCanceledException` and no follow-up runs.
+failure has `Failure.OutcomeUnknown` and a reference exists, the SDK makes one
+`InquireByReferenceAsync` and attaches the finding as `Failed.Recovered`. A
+`CancellationToken` cancellation is never turned into a result: it throws
+`OperationCanceledException` and no follow-up runs.
 
 ---
 
@@ -544,172 +366,100 @@ result: it throws `OperationCanceledException` and no follow-up runs.
 ```csharp
 public sealed class EcrWebServiceTerminal
 {
-    public EcrWebServiceTerminal(
-        string terminalSerial,
-        EcrConfig? config = null,
-        IEcrLogger? logger = null)
+    public EcrWebServiceTerminal(string terminalSerial, EcrConfig? config = null, IEcrLogger? logger = null)
 }
 ```
 
-Web Service ECR client — REST over HTTPS with JSON body signing. Use instead of
-[EcrTerminal](#ecrterminal) when TMS sets `ecrMode: 4`. Prefer building via
-[EcrSessions.WebServiceTerminal](#webserviceterminal) after
-[Plan](#plan) reports `IsReady` — see
-[initialization process](integration-guide.md#initialization-process).
-
-Requires `config.MerchantId`, `config.TerminalId` (numeric), and the **Web Service
-secure hash key** on `config.SecureHashKey`. Hub URLs come from
-`config.Environment`; paths (`/Ecr/Sale`, `/Ecr/Void`, `/Ecr/Refund`,
-`/Ecr/Inquiry`) are fixed inside the SDK. If the IDs are not numeric the
-call returns `EcrResult.Failed` with `Failure.Malformed` and sends nothing.
+Web Service ECR client: REST over HTTPS with JSON body signing, for terminals with
+`ecrMode: 4`. Prefer [EcrSessions.WebServiceTerminal](#lanterminal-usbcableterminal-webserviceterminal)
+after `Plan` reports `IsReady`. It needs numeric `config.MerchantId` and
+`config.TerminalId` and the **Web Service** key on `config.SecureHashKey`; if the IDs
+are not numeric, a call returns `Failed` with `Failure.Malformed` and sends nothing.
+Building it directly does not apply the 130 s `ResponseTimeout` that `Plan` applies;
+set `ResponseTimeout = EcrConfig.WebServiceResponseTimeout` yourself.
 
 ```csharp
-public Task<EcrResult> SaleAsync(
-    decimal amount,
-    string merchantReference = "",
-    CancellationToken cancellationToken = default)
-
-public Task<EcrResult> VoidAsync(
-    string receiptNumber,
-    string merchantReference = "",
-    CancellationToken cancellationToken = default)
-
-public Task<EcrResult> RefundAsync(
-    decimal amount,
-    string receiptNumber,
-    string transactionDate,
-    string merchantReference = "",
-    CancellationToken cancellationToken = default)
-
-public Task<EcrInquiry> InquireAsync(
-    string receiptNumber,
-    string transactionDate,
-    string merchantReference = "",
-    CancellationToken cancellationToken = default)
-
-public Task<EcrInquiry> InquireByReferenceAsync(
-    string originalReference,
-    string transactionDate,
-    string merchantReference = "",
-    CancellationToken cancellationToken = default)
+public Task<EcrResult> SaleAsync(decimal amount, string merchantReference = "", CancellationToken cancellationToken = default)
+public Task<EcrResult> VoidAsync(string receiptNumber, string merchantReference = "", CancellationToken cancellationToken = default)
+public Task<EcrResult> RefundAsync(decimal amount, string receiptNumber, string transactionDate, string merchantReference = "", CancellationToken cancellationToken = default)
+public Task<EcrInquiry> InquireAsync(string receiptNumber, string transactionDate, string merchantReference = "", CancellationToken cancellationToken = default)
+public Task<EcrInquiry> InquireByReferenceAsync(string originalReference, string transactionDate, string merchantReference = "", CancellationToken cancellationToken = default)
+public Task<EcrReceiptClosed> CloseReceiptAsync(string originalMerchantReference, string merchantReference = "", CancellationToken cancellationToken = default)
 ```
 
-**The argument lists differ from `EcrTerminal`'s.** There is no
-`originalTerminalId`, so the second positional argument of `VoidAsync` is a
-`merchantReference`, not a terminal id: `webTerminal.VoidAsync("215", "31629")`
-names the void `31629`. Use named arguments. `transactionDate` on
-`InquireByReferenceAsync` is required here and optional on LAN.
+**The argument lists differ from `EcrTerminal`'s.** There is no `originalTerminalId`,
+so the second positional argument of `VoidAsync` is a `merchantReference`:
+`hub.VoidAsync("215", "31629")` names the void `31629`. Use named arguments.
+`transactionDate` on `InquireByReferenceAsync` is required here (pass `""`), optional
+on LAN. `CloseReceiptAsync` takes the original's reference **first**.
 
-| Method                                                   | LAN / USB | Web Service | Notes                                                   |
-| -------------------------------------------------------- | --------- | ----------- | ------------------------------------------------------- |
-| `SaleAsync(amount, merchantReference?)`                  | Yes       | Yes         |                                                         |
-| `VoidAsync(receiptNumber, …)`                            | Yes       | Yes         | LAN: optional `originalTerminalId`, `merchantReference` |
-| `RefundAsync(amount, receiptNumber, transactionDate, …)` | Yes       | Yes         | LAN: optional `originalTerminalId`                      |
-| `InquireAsync(receiptNumber, transactionDate, …)`        | Yes       | Yes         | STAN required; LAN: optional `originalTerminalId`       |
-| `InquireByReferenceAsync(originalReference, …)`          | Yes       | Yes         | Sends `originalMerchantReference`; `stan` empty         |
-| `ReceiptAsync(receiptNumber, transactionDate, …)`        | Yes       | **None**    | LAN / USB only                                          |
-| `ProbeReachabilityAsync()` / `IsReachableAsync()`        | Yes       | **None**    | TCP only                                                |
-| `RunAsync(type, …)`                                      | Yes       | **None**    | Money-moving ops on LAN / USB only                      |
+There is no `ReceiptAsync`, `RunAsync`, `IsReachableAsync` or
+`ProbeReachabilityAsync`, no response signature verification, and no auto-inquiry
+(`Failed.Recovered` is always `null`). Void, refund and inquiry send
+`originalTerminalId` equal to the request's own `terminalId`.
 
-Returns the same [EcrResult](#ecrresult) / [EcrInquiry](#ecrinquiry) types where the
-operation exists on both transports.
+### CloseReceiptAsync
 
-**Not on Web Service today:** `ReceiptAsync`, response signature verification,
-and [EcrConfig.AutoInquireOnFailure](#ecrconfig) recovery. Void/refund/inquiry
-send `originalTerminalId` (= request `terminalId`).
+*Requires 1.0.2.* Posts `/Ecr/closeReceipt` for the sale / void / refund named by
+`originalMerchantReference`; `merchantReference` is this request's own id (generated
+when blank). The body has no `messageType` or `currencyCode` and is signed like every
+other Hub call (see [protocol](protocol.md#9-web-service-rest)). Never sent
+automatically.
 
-### Transport errors: read this before you branch on `Declined`
+A blank `originalMerchantReference`, or non-numeric IDs, return
+`EcrReceiptClosed.Failed` with `Failure.Malformed` and send nothing. Because a
+transport error is read from a `success: false` envelope, it arrives as
+`EcrReceiptClosed.Refused` with `ResponseCode == "NO_RESPONSE"`, not as `Failed`.
 
-The HTTP layer never throws for a network problem. A timeout, no network, a
-connection reset, an empty body, or a body that is not JSON comes back as a
-synthesised `{ "success": false, "responseCode": …, "message": … }` envelope, and
-the SDK reads `success: false` as a decline. Whenever the request **may have
-reached the Hub**, that envelope also carries `"nextStep":
-"INQUIRE_BY_MERCHANT_REFERENCE"`, so the result says the outcome is unknown:
+### How a Web Service answer maps to a result
 
-| What happened                                               | `SaleAsync` / `VoidAsync` / `RefundAsync`                                                                       | `InquireAsync` / `InquireByReferenceAsync`        |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| Timeout, no network, reset                                  | `Declined`, `ResponseCode == "NO_RESPONSE"`, `Reason` = the error, **`NextStep == InquireByMerchantReference`** | `EcrInquiry.Failed` with `Failure.ConnectionLost` |
-| Hub answered with an empty body, or a body that is not JSON | `Declined`, `ResponseCode` = the HTTP status (`502`, …), **`NextStep == InquireByMerchantReference`**           | `Failed` / `ConnectionLost`                       |
-| HTTP 5xx with no readable `message` / `errorList`           | `Declined`, `ResponseCode` = the status, **`NextStep == InquireByMerchantReference`**                           | `Failed` / `ConnectionLost`                       |
-| HTTP 4xx with no readable `message` / `errorList`           | `Declined`, `ResponseCode` = the status, `NextStep == None`                                                     | `NotFound` (no transaction record)                |
-| Non-2xx with a readable JSON `message` / `errorList`        | `Declined` from the Hub's own answer, `NextStep == None` unless the Hub says otherwise                          | `NotFound` or `Found` per the body                |
-| Hub answered normally                                       | `Approved` / `Declined` (`NextStep == None`)                                                                    | `Found` / `NotFound`                              |
+The HTTP layer never throws for a network problem. A timeout, no network, a reset, an
+empty body or a body that is not JSON comes back as a synthesised
+`{ "success": false, "responseCode": ..., "message": ... }` envelope. When the request
+may have reached the Hub, the envelope carries
+`"nextStep": "INQUIRE_BY_MERCHANT_REFERENCE"`, and the SDK reads that as an unknown
+outcome: `EcrResult.Failed`, never `Declined`.
 
-**The reliable signal is `Declined.NextStep == NextStep.InquireByMerchantReference`:
-that means unknown outcome — inquire before retrying — not a refusal.**
-`ResponseCode == "NO_RESPONSE"` is the common cause (timeout, no network, broken
-connection), but the empty, unreadable and 5xx cases carry the same `NextStep`
-under an HTTP-status code, so branch on `NextStep`, not on the code. A genuine
-`EcrInquiry.NotFound` is now a real answer from the Hub; a failed lookup arrives as
-`EcrInquiry.Failed` (still unknown — ask again). The request has a single deadline
-of `ConnectTimeout + ResponseTimeout`. Cancelling your token throws
-`OperationCanceledException` as elsewhere.
+| What happened | Sale / void / refund | Inquiry / inquiry by reference |
+|---|---|---|
+| Timeout, no network, reset (`NO_RESPONSE`) | `Failed`, `Failure.Timeout` | `EcrInquiry.Failed`, `Failure.ConnectionLost` |
+| Empty or non-JSON body | `Failed`, `Failure.ConnectionLost` (`Timeout` if the text says timeout) | `Failed`, `ConnectionLost` |
+| HTTP 5xx with no readable `message` / `errorList` | `Failed`, `ConnectionLost` (`Timeout` for e.g. 504 "Gateway Timeout") | `Failed`, `ConnectionLost` |
+| HTTP 4xx with no readable `message` / `errorList` | `Declined`, `ResponseCode` = the status, `NextStep.None` | `NotFound` |
+| Non-2xx with a readable JSON `message` / `errorList` | `Declined` from the Hub's own answer | `NotFound` or `Found` per the body |
+| Hub answered normally | `Approved` / `Declined` | `Found` / `NotFound` |
 
-### InquireByReferenceAsync
+Mapping rule for the first three rows: a synthesised envelope with
+`responseCode == "NO_RESPONSE"` or text containing "timeout" becomes
+`Failure.Timeout`; otherwise `Failure.ConnectionLost`. `EcrInquiry.NotFound` is a
+real answer from the Hub; a failed lookup is `EcrInquiry.Failed` (still unknown, ask
+again). The request has one deadline of `ConnectTimeout + ResponseTimeout`.
 
-On Web Service the SDK POSTs to `/Ecr/Inquiry` with `originalMerchantReference`
-set, empty `stan`, `originalTerminalId` = request `terminalId`, and Hub-required
-`requestDateTime` (= `transactionDateTime`), matching the Kotlin ecr-sdk Hub
-contract. `transactionDate` (`yyyyMMdd`) is optional — blank leaves the day
-unfiltered; supply it when you know the original's day.
-
-A found answer may carry the transaction under nested `data` and/or as Hub flat
-fields at the top level; correlation-only `data` (merchant reference / serial
-alone) is **not** treated as found. A transport failure on the lookup itself is
-`EcrInquiry.Failed` / `ConnectionLost`, not `NotFound`.
-
-Build via [EcrSessions.WebServiceTerminal](#webserviceterminal) after a ready
-[EcrSessionPlan](#ecrsessionplan). The client shares one static `HttpClient` for the
-process and uses the machine's default proxy settings.
-
-### Low-level request builders (optional)
-
-Advanced integrators can build signed JSON without the terminal classes — see
-[Web Service request types](#web-service-request-types).
+A found answer may carry the transaction nested under `data` or as flat fields at the
+top level; `data` holding only a merchant reference or serial is not a found record.
 
 ---
 
 ## Merchant reference
 
-Every operation takes an optional `merchantReference`, and every outcome
-reports one back.
+Every operation takes an optional `merchantReference`, and every outcome reports one.
+Pass your own order or basket number and the same string identifies the transaction
+in your books, the terminal's records and any later inquiry. Leave it out and the SDK
+generates one (12 uppercase hex characters, e.g. `A1B2C3D4E5F6`) and reports it on
+the result; store it.
 
-Pass your own when your system already names the transaction — an order number,
-a basket id, a ticket number. The same string then identifies it in your books,
-in the terminal's records and in any later inquiry, so there is no mapping table
-to keep and nothing to reconcile by timestamp.
+| | |
+|---|---|
+| Length | 1-32 characters |
+| Characters | Printable ASCII, no spaces, not `&` or `=` |
+| Uniqueness | Yours to decide; the terminal does not check it |
 
-```csharp
-var result = await terminal.SaleAsync(1.234m, merchantReference: "ORD-88231");
-Console.WriteLine(result.MerchantReference);   // ORD-88231
-```
+Surrounding whitespace is trimmed and an all-whitespace reference counts as none.
+Anything else outside the rules throws `ArgumentException` before a connection is
+opened. Pass your own if a cancellation or crash can interrupt the call.
 
-Leave it out and the SDK generates one — 12 uppercase hex characters — and
-reports it on the result. Store that: it is what names the transaction
-afterwards.
-
-```csharp
-var result = await terminal.SaleAsync(1.234m);
-Console.WriteLine(result.MerchantReference);   // A1B2C3D4E5F6
-```
-
-|            |                                                                           |
-| ---------- | ------------------------------------------------------------------------- |
-| Length     | 1–32 characters                                                           |
-| Characters | Printable ASCII, no spaces, and not `&` or `=`                            |
-| Uniqueness | Yours to decide. The terminal carries the reference and does not check it |
-
-Surrounding whitespace is trimmed, and a reference of nothing but whitespace
-counts as none given. Anything else outside the rules above throws
-`ArgumentException` before a connection is opened.
-
-**Pass your own if a cancellation or a crash can interrupt the call** — a
-generated reference reaches you only on a returned result.
-
-> **Older name.** On the wire this field was called `requestId` until tills could
-> supply their own reference. Both are now `merchantReference`; a terminal still
-> accepts and still echoes the old name, so mixed versions interoperate.
+On the wire this field was once called `requestId`; a terminal still accepts and
+echoes the old name.
 
 ---
 
@@ -719,6 +469,7 @@ generated reference reaches you only on a returned result.
 public sealed record EcrConfig
 {
     public const int DefaultPort = 9100;
+    public static readonly TimeSpan WebServiceResponseTimeout;   // 130 seconds
 
     public string EcrId { get; init; }                   // "ECR01"
     public string CurrencyCode { get; init; }            // "512"
@@ -737,9 +488,8 @@ public sealed record EcrConfig
 }
 ```
 
-There is no constructor with parameters: set what you need with an object
-initializer and derive variants with `with`. **C# 9 or later is required** to
-assign the `init` properties.
+No parameterised constructor: use an object initializer and `with`. **C# 9 or later**
+is required to assign `init` properties.
 
 ```csharp
 var config = new EcrConfig { EcrId = "TILL-01", SecureHashKey = "0123456789ABCDEF..." };
@@ -748,76 +498,48 @@ var stricter = config with { ResponseTimeout = TimeSpan.FromSeconds(60) };
 
 The defaults describe an Omani deployment on the standard port.
 
-| Property                    | Meaning                                                                                                                                                                                                                                                                         |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `EcrId`                     | Identifies this cash register to the terminal, and appears on the terminal's records                                                                                                                                                                                            |
-| `CurrencyCode`              | ISO 4217 numeric. `512` is OMR                                                                                                                                                                                                                                                  |
-| `MinorUnitDigits`           | Decimal places the currency has. Decides how `1.234` is written on the wire                                                                                                                                                                                                     |
-| `Port`                      | The terminal's ECR listener port (LAN ECR)                                                                                                                                                                                                                                      |
-| `ConnectTimeout`            | How long to wait for the terminal to accept a connection. A timeout here is `Failure.Unreachable` (nothing was sent). For Web Service it is added to `ResponseTimeout`                                                                                                          |
-| `ResponseTimeout`           | How long to wait for the result once the request is sent. Generous by default — the cardholder has to present a card and may be asked for a PIN. A timeout here is `Failure.Timeout`                                                                                            |
-| `ProbeTimeout`              | How long [ProbeReachabilityAsync](#probereachabilityasync) waits. Short on purpose                                                                                                                                                                                              |
-| `SecureHashKey`             | Signing secret as hex, **supplied by the app** for the selected terminal mode. LAN and Web Service use different secrets and formats, but both are passed through this single property. Empty means unsigned                                                                    |
-| `MerchantId` / `TerminalId` | Backend IDs for Web Service ECR. Usually merged from [EcrLink.WebService](#ecrlink) by [EcrSessions.Plan](#plan)                                                                                                                                                                |
-| `Environment`               | Hub deployment for Web Service. URLs are SDK-internal                                                                                                                                                                                                                           |
-| `AutoInquireOnFailure`      | When `true` (default), **[EcrTerminal](#ecrterminal) only** follows an unknown failure with `InquireByReferenceAsync(MerchantReference)` and attaches the finding to [EcrResult.Failed.Recovered](#ecrresultfailed). Ignored by [EcrWebServiceTerminal](#ecrwebserviceterminal) |
+| Property | Meaning |
+|---|---|
+| `EcrId` | Identifies this cash register on the terminal's records |
+| `CurrencyCode` | ISO 4217 numeric. `512` is OMR |
+| `MinorUnitDigits` | Decimal places of the currency; decides how `1.234` is written on the wire |
+| `Port` | The terminal's ECR listener port (LAN) |
+| `ConnectTimeout` | Wait for the terminal to accept a connection. A timeout is `Failure.Unreachable` (nothing was sent). On Web Service it is added to `ResponseTimeout` |
+| `ResponseTimeout` | Wait for the result once the request is sent. Generous because the cardholder has to present a card and may enter a PIN. A timeout is `Failure.Timeout`. For Web Service, [Plan](#plan) raises the 120 s default to `WebServiceResponseTimeout` (130 s) |
+| `ProbeTimeout` | How long a probe waits |
+| `SecureHashKey` | Signing secret as hex, supplied by the app for the selected mode. LAN and Web Service use different secrets and field names but both go through this property. Empty means unsigned (and a plan is not ready) |
+| `MerchantId` / `TerminalId` | Backend IDs for Web Service. Normally merged from [EcrLink.WebService](#ecrlink) by `Plan` |
+| `Environment` | Hub deployment for Web Service; URLs are SDK-internal |
+| `AutoInquireOnFailure` | When `true`, **[EcrTerminal](#ecrterminal) only** follows an unknown failure with `InquireByReferenceAsync(MerchantReference)` and attaches the finding to `Failed.Recovered`. Ignored by `EcrWebServiceTerminal` |
 
-**Throws** `ArgumentException` **at assignment** if `MinorUnitDigits` is outside 0–4,
-`Port` is outside 1–65535, or `SecureHashKey` is neither empty nor an
-even-length hex string of at least 16 characters. Timeouts are not validated.
+**Throws** `ArgumentException` **at assignment** if `MinorUnitDigits` is outside 0-4,
+`Port` outside 1-65535, or `SecureHashKey` is neither empty nor an even-length hex
+string of at least 16 characters. Timeouts are not validated. `ToString()` redacts a
+non-empty key as `<redacted>`.
 
-`ToString()` redacts a non-empty `SecureHashKey` as `<redacted>`.
-
-### IsValidSecureHashKey
-
-```csharp
-public static bool IsValidSecureHashKey(string? key)
-```
-
-Whether `key` is acceptable for `SecureHashKey` — null, empty, or even-length hex of
-at least 16 characters. Use in settings UI before persisting a key.
+`IsValidSecureHashKey(key)` is true for null, empty, or even-length hex of at least 16
+characters; use it in settings UI before persisting a key.
 
 ### Signing
 
-```csharp
-var terminal = new EcrTerminal(
-    host: "192.168.1.50",
-    serialNumber: "P653200085189",
-    config: new EcrConfig { SecureHashKey = secureHashKeyFromProtectedStore });
-```
+The app persists secrets and chooses which one goes on `EcrConfig`; the SDK only
+signs and verifies with it. **LAN ECR** adds `secureHash` and a per-request `nonce`
+and requires the answer to be signed and to echo the nonce. **Web Service ECR** adds
+`secureHashValue` to the JSON body. Keys are issued per terminal and per transport.
+Mismatched keys give `Failure.Unauthenticated` on every LAN call; Web Service calls
+fail at the Hub. Details: [protocol](protocol.md#signing).
 
-The app persists secrets and chooses which one to put on `EcrConfig` for the
-selected terminal mode. The SDK only signs and verifies with that value — it
-does not store keys. On Windows, keep it encrypted at rest (DPAPI; see the
-[guide](integration-guide.md#15-going-to-production)).
-
-**LAN ECR** adds field `secureHash` and a per-request `nonce`, and requires the
-answer to be signed and to echo the nonce.
-**Web Service ECR** adds field `secureHashValue` to the JSON body. The signing
-string is built the same way in both cases; only the field name and secret differ.
-
-Amwal issues keys **per terminal and per transport** — delivered to the terminal
-by TMS and to you separately. They are not values to invent or commit to a
-repository.
-
-**What you will see if the keys do not match:** every LAN call returns
-`Failure.Unauthenticated`. Web Service calls fail at the Hub.
-
-### MinorUnitDigits in detail
+### MinorUnitDigits
 
 Amounts travel as a whole number of the currency's smallest unit:
 
-| Currency                   | Digits | `1.234` goes out as         |
-| -------------------------- | ------ | --------------------------- |
-| OMR — 1 rial = 1000 baisa  | 3      | `000000001234`              |
-| USD — 1 dollar = 100 cents | 2      | `000000000123` (for `1.23`) |
+| Currency | Digits | Goes out as |
+|---|---|---|
+| OMR (1 rial = 1000 baisa) | 3 | `1.234` becomes `000000001234` |
+| USD (1 dollar = 100 cents) | 2 | `1.23` becomes `000000000123` |
 
-Nothing cross-checks it against `CurrencyCode`. Setting `840` (USD) while leaving
-`3` sends every amount ten times too large and neither the SDK nor the terminal
-will object.
-
-Amounts you _receive_ are converted back, so `EcrResult.Approved.Amount` is
-always in major units.
+Nothing cross-checks the digits against `CurrencyCode`. Amounts you receive are
+converted back to major units.
 
 ---
 
@@ -833,74 +555,46 @@ public static class EcrEnvironments
 }
 ```
 
-Deployment environment for Web Service ECR. Set it on [EcrConfig.Environment](#ecrconfig).
-Hub hostnames and ports are **SDK-internal** and are not documented for integrators —
-the app only selects `SIT`, `UAT`, or `PROD`.
-
-|                                     |                                                                                                                     |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `EcrEnvironments.Default`           | `EcrEnvironment.SIT`                                                                                                |
-| `EcrEnvironments.FromName(string?)` | Parses a persisted name, ignoring case and surrounding whitespace; unknown values (and null) fall back to `Default` |
-
-Integrators do **not** configure REST hostnames — only this enum.
+Deployment environment for Web Service ECR, set on `EcrConfig.Environment`. Hub
+hostnames and ports are SDK-internal and not documented; the app only selects the
+enum. `FromName` parses a persisted name, ignoring case and surrounding whitespace;
+unknown values and null fall back to `Default`.
 
 ---
 
 ## EcrTransactionType
 
 ```csharp
-public enum EcrTransactionType
-{
-    Sale, Void, Refund, Inquiry, Receipt
-}
+public enum EcrTransactionType { Sale, Void, Refund, Inquiry, Receipt, CloseReceipt }
 ```
 
-The flags live on the static class `EcrTransactionTypes` as extension methods:
+`CloseReceipt` was added in 1.0.2; an exhaustive `switch` over this enum needs a new
+case. The flags are extension methods on the static class `EcrTransactionTypes`:
 
 ```csharp
-public static class EcrTransactionTypes
-{
-    public static IReadOnlyList<EcrTransactionType> MenuOptions { get; }
+public static IReadOnlyList<EcrTransactionType> MenuOptions { get; }   // Sale, Void, Refund, Inquiry
 
-    public static string MessageType(this EcrTransactionType type)
-    public static string DisplayName(this EcrTransactionType type)
-    public static bool RequiresAmount(this EcrTransactionType type)
-    public static bool RequiresOriginalStan(this EcrTransactionType type)
-    public static bool RequiresOriginalDate(this EcrTransactionType type)
-    public static bool MovesMoney(this EcrTransactionType type)
-    public static bool AllowsOtherTerminal(this EcrTransactionType type)
-}
+public static string MessageType(this EcrTransactionType type)   // "SALE", "VOID", "REFUND", "INQUIRY", "RECEIPT", "CLOSE_RECEIPT"
+public static string DisplayName(this EcrTransactionType type)   // "Sale", ..., "Close receipt"
+public static bool RequiresAmount(this EcrTransactionType type)
+public static bool RequiresOriginalStan(this EcrTransactionType type)
+public static bool RequiresOriginalDate(this EcrTransactionType type)
+public static bool MovesMoney(this EcrTransactionType type)
+public static bool AllowsOtherTerminal(this EcrTransactionType type)
 ```
 
-|           | `RequiresAmount()` | `RequiresOriginalStan()` | `RequiresOriginalDate()` | `AllowsOtherTerminal()` | `MovesMoney()` |
-| --------- | ------------------ | ------------------------ | ------------------------ | ----------------------- | -------------- |
-| `Sale`    | ✔                  |                          |                          |                         | ✔              |
-| `Void`    |                    | ✔                        |                          | ✔                       | ✔              |
-| `Refund`  | ✔                  | ✔                        | ✔                        | ✔                       | ✔              |
-| `Inquiry` |                    | ✔                        | ✔                        | ✔                       |                |
-| `Receipt` |                    | ✔                        | ✔                        | ✔                       |                |
+| | `RequiresAmount` | `RequiresOriginalStan` | `RequiresOriginalDate` | `AllowsOtherTerminal` | `MovesMoney` |
+|---|---|---|---|---|---|
+| `Sale` | yes | | | | yes |
+| `Void` | | yes | | yes | yes |
+| `Refund` | yes | yes | yes | yes | yes |
+| `Inquiry` | | yes | yes | yes | |
+| `Receipt` | | yes | yes | yes | |
+| `CloseReceipt` | | | | | |
 
-| Member                   | Description                                                                                                      |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| `MessageType()`          | The value carried in the message's `messageType` field: `"SALE"`, `"VOID"`, `"REFUND"`, `"INQUIRY"`, `"RECEIPT"` |
-| `DisplayName()`          | A human-readable name: `"Sale"`, …                                                                               |
-| `RequiresAmount()`       | Whether the caller supplies an amount                                                                            |
-| `RequiresOriginalStan()` | Whether the caller identifies an earlier transaction by receipt number                                           |
-| `RequiresOriginalDate()` | Whether the caller supplies the original's date                                                                  |
-| `AllowsOtherTerminal()`  | Whether the operation may target another terminal                                                                |
-| `MovesMoney()`           | Whether the operation is financial                                                                               |
-
-```csharp
-EcrTransactionTypes.MenuOptions   // [Sale, Void, Refund, Inquiry]
-```
-
-The operations an operator picks from. `Receipt` is absent by design: a receipt
-follows a transaction already on screen rather than being chosen from a list.
-
-What the terminal will _accept_ is a separate question, answered by the terminal —
-whether the original exists, whether it is within the void window, whether it may
-be voided at all. None of that can be decided here; it needs the payment backend
-and the terminal's TMS configuration.
+`MenuOptions` is what an operator picks from; `Receipt` and `CloseReceipt` follow a
+transaction already on screen. What the terminal will accept (original exists, within
+the void window, voidable) is decided by the terminal, not here.
 
 ---
 
@@ -910,96 +604,65 @@ and the terminal's TMS configuration.
 public abstract record EcrResult(string MerchantReference)
 ```
 
-How a transaction ended. The three cases are deliberately distinct because they
-call for different things from a till. The compiler cannot prove a `switch`
-expression over them exhaustive, so give it a final discard arm.
+How a transaction ended. The three cases are distinct because they call for different
+things from a till. C# cannot prove a `switch` expression exhaustive, so give it a
+final discard arm.
 
 ### EcrResult.Approved
 
 ```csharp
 public sealed record Approved(
-    string MerchantReference,
-    string Amount,
-    string ResponseCode,
-    string Rrn,
-    string AuthCode,
-    string MaskedPan,
-    bool PartialApproval,
-    string RequestedAmount,
+    string MerchantReference, string Amount, string ResponseCode, string Rrn,
+    string AuthCode, string MaskedPan, bool PartialApproval, string RequestedAmount,
     string Raw) : EcrResult(MerchantReference)
 ```
 
 Money was taken.
 
-| Property          | Description                                                              |
-| ----------------- | ------------------------------------------------------------------------ |
-| `Amount`          | What was **actually taken**, in major units, e.g. `1.234`                |
-| `ResponseCode`    | The backend's code, `00` on a plain approval                             |
-| `Rrn`             | Retrieval reference number                                               |
-| `AuthCode`        | Authorisation code. A placeholder on a void — do not print it            |
-| `MaskedPan`       | Masked, never the full number: `543173xxxx5785`. May be empty            |
-| `PartialApproval` | The bank authorised less than was asked for. **Not a refusal**           |
-| `RequestedAmount` | What was asked for, when `PartialApproval` is set                        |
-| `Raw`             | The terminal's full answer as JSON text, for anything not surfaced above |
-
-`Raw` is text rather than a parsed tree so clients are not forced onto this SDK's
-JSON library.
+| Property | Description |
+|---|---|
+| `Amount` | What was **actually taken**, major units, e.g. `1.234` |
+| `ResponseCode` | The backend's code, `00` on a plain approval |
+| `Rrn` | Retrieval reference number |
+| `AuthCode` | Authorisation code. A placeholder on a void; do not print it |
+| `MaskedPan` | Masked, never the full number (`543173xxxx5785`). May be empty |
+| `PartialApproval` | The bank authorised less than asked. Not a refusal |
+| `RequestedAmount` | What was asked for, when `PartialApproval` is set |
+| `Raw` | The terminal's full answer as JSON text |
 
 ### EcrResult.Declined
 
 ```csharp
 public sealed record Declined(
-    string MerchantReference,
-    string ResponseCode,
-    string Reason,
-    NextStep NextStep,
-    string Raw) : EcrResult(MerchantReference)
+    string MerchantReference, string ResponseCode, string Reason,
+    NextStep NextStep, string Raw) : EcrResult(MerchantReference)
 ```
 
-The terminal answered and no money was taken. `Reason` carries the backend's own
-words where it gave any — its error list in preference to its generic message.
-`NextStep` hints whether the till should inquire by merchant reference
-(`NextStep.InquireByMerchantReference`) or accept the decline as final
-(`NextStep.None`).
-
-**On Web Service, a transport error also arrives here** — usually `ResponseCode ==
-"NO_RESPONSE"`, always with `NextStep == InquireByMerchantReference` — that is an
-unknown outcome, not a refusal. Check `NextStep`.
-See [EcrWebServiceTerminal](#transport-errors-read-this-before-you-branch-on-declined).
-On any transport, the terminal's own codes `91` and `94` ask for an inquiry rather
-than a retry.
+The terminal or Hub answered and no money was taken. `Reason` carries the backend's
+own words (its error list in preference to its generic message). Any answer carrying
+`nextStep: INQUIRE_BY_MERCHANT_REFERENCE` is returned as [Failed](#ecrresultfailed),
+so `NextStep` is `None` on every `Declined` this SDK builds; the terminal's codes `91`
+and `94` arrive here and call for an inquiry rather than a retry.
 
 ### EcrResult.Failed
 
 ```csharp
 public sealed record Failed(
-    string MerchantReference,
-    Failure Failure,
-    EcrInquiry? Recovered = null) : EcrResult(MerchantReference)
+    string MerchantReference, Failure Failure, EcrInquiry? Recovered = null)
+    : EcrResult(MerchantReference)
 {
-    public NextStep NextStep { get; }
-    public bool Settled { get; }
+    public NextStep NextStep { get; }   // always InquireByMerchantReference
+    public bool Settled { get; }        // Recovered is EcrInquiry.Found
 }
 ```
 
-The exchange itself failed, so the outcome is unknown. A `Failure.Timeout` in
-particular does **not** mean the transaction did not happen — see [Failure](#failure).
-
-When [EcrConfig.AutoInquireOnFailure](#ecrconfig) is `true` (default) on **LAN /
-USB**, [EcrTerminal](#ecrterminal) follows an unknown failure with
-`InquireByReferenceAsync()` using the request's `MerchantReference`. If the terminal
-answers, `Recovered` holds the finding. Properties on `Failed`:
-
-| Property    | Description                                                                                                                                        |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Failure`   | Why the exchange failed                                                                                                                            |
-| `Recovered` | Follow-up inquiry result, or null                                                                                                                  |
-| `NextStep`  | Always `NextStep.InquireByMerchantReference`                                                                                                       |
-| `Settled`   | `true` when `Recovered is EcrInquiry.Found`. It means the transaction was **found** — read its `Status`; a found sale can still have been declined |
-
-On Web Service, `EcrResult.Failed` occurs only for non-numeric `MerchantId` /
-`TerminalId` (nothing was sent; `MerchantReference` is empty). A Web Service
-transport failure is a `Declined` with `NextStep == InquireByMerchantReference`.
+The exchange itself failed, so the outcome is unknown. A `Failure.Timeout` does not
+mean the transaction did not happen. `Recovered` is the follow-up inquiry on LAN / USB
+with `AutoInquireOnFailure`, otherwise `null` (always `null` on Web Service).
+`Settled` means the transaction was **found**; read its `Status`, because a found sale
+can still have been declined. A Web Service transport failure is a `Failed` with
+`Failure.Timeout` or `Failure.ConnectionLost`; see
+[how a Web Service answer maps to a result](#how-a-web-service-answer-maps-to-a-result).
 
 ---
 
@@ -1014,16 +677,15 @@ public abstract record EcrInquiry(string MerchantReference)
 }
 ```
 
-The answer to "what became of this transaction". Kept apart from `EcrResult`
-because it reports on a transaction rather than performing one: an inquiry that
-succeeds says nothing about whether money moved — that is
-`EcrTransaction.Status`.
+The answer to "what became of this transaction". It reports on a transaction rather
+than performing one: a successful inquiry says nothing about whether money moved;
+that is `EcrTransaction.Status`.
 
-| Case       | Properties                                   | Meaning                                                                                                                                       |
-| ---------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Found`    | `Transaction: EcrTransaction`, `Raw: string` | The transaction was found                                                                                                                     |
-| `NotFound` | `Reason: string`, `Raw: string`              | No such transaction on that terminal for that day — a real answer                                                                             |
-| `Failed`   | `Failure: Failure`                           | The exchange failed (on Web Service, a transport failure arrives as `Failure.ConnectionLost`). Harmless to retry — an inquiry changes nothing |
+| Case | Meaning |
+|---|---|
+| `Found` | The transaction was found. Read `Transaction.Status` |
+| `NotFound` | No such transaction on that terminal for that day; a real answer. `Reason` is the backend's words |
+| `Failed` | The exchange failed, so nothing was learned. Harmless to retry; an inquiry changes nothing |
 
 ---
 
@@ -1031,44 +693,30 @@ succeeds says nothing about whether money moved — that is
 
 ```csharp
 public sealed record EcrTransaction(
-    string TransactionId,
-    string Stan,
-    string Type,
-    string Status,
-    string Amount,
-    string TotalAmount,
-    string Currency,
-    string TransactionTime,
-    string MaskedPan,
-    string CardHolderName,
-    string Rrn,
-    string AuthCode,
-    string BatchId,
-    string TerminalId,
-    bool IsRefunded,
-    bool CanVoid,
-    bool CanRefund,
-    bool PartialApproval = false,
-    string AuthorizedAmount = "")
+    string TransactionId, string Stan, string Type, string Status, string Amount,
+    string TotalAmount, string Currency, string TransactionTime, string MaskedPan,
+    string CardHolderName, string Rrn, string AuthCode, string BatchId, string TerminalId,
+    bool IsRefunded, bool CanVoid, bool CanRefund,
+    bool PartialApproval = false, string AuthorizedAmount = "")
 ```
 
 A transaction as the terminal's backend records it.
 
-| Property                                      | Description                                                                                        |
-| --------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `TransactionId`                               | The backend's identifier, unique across terminals and days                                         |
-| `Stan`                                        | The receipt number, unique only within a terminal's day                                            |
-| `Type`                                        | `Purchase`, `Void`, `Refund` — as the backend names it                                             |
-| `Status`                                      | What became of it: `Approved`, `Declined`, `Voided`                                                |
-| `Amount` / `TotalAmount`                      | Major units, e.g. `0.258`. `Amount` is what was requested; `TotalAmount` includes tips and fees    |
-| `Currency`                                    | `OMR`                                                                                              |
-| `TransactionTime`                             | As the backend recorded it: `2026-08-09T16:58:16.804271`                                           |
-| `MaskedPan` / `CardHolderName`                | Never the full number. May be empty                                                                |
-| `Rrn` / `AuthCode` / `BatchId` / `TerminalId` |                                                                                                    |
-| `IsRefunded`                                  | Whether it has already been refunded                                                               |
-| `CanVoid` / `CanRefund`                       | What the terminal would still accept — the void window and the backend's rules are already applied |
-| `PartialApproval`                             | The issuer approved less than the sale asked for                                                   |
-| `AuthorizedAmount`                            | What was actually authorised. Equal to `Amount` unless partially approved                          |
+| Property | Description |
+|---|---|
+| `TransactionId` | The backend's identifier, unique across terminals and days |
+| `Stan` | The receipt number, unique only within a terminal's day |
+| `Type` | As the backend names it (e.g. `Purchase`, `Void`, `Refund`) |
+| `Status` | What became of it: `Approved`, `Declined`, `Voided` |
+| `Amount` / `TotalAmount` | Major units. `Amount` is what was requested; `TotalAmount` includes tips and fees |
+| `Currency` | e.g. `OMR` |
+| `TransactionTime` | As the backend recorded it, e.g. `2026-08-09T16:58:16.804271` |
+| `MaskedPan` / `CardHolderName` | Never the full number. May be empty |
+| `Rrn` / `AuthCode` / `BatchId` / `TerminalId` | As recorded |
+| `IsRefunded` | Already refunded |
+| `CanVoid` / `CanRefund` | What the terminal would still accept; the void window and backend rules are already applied |
+| `PartialApproval` | The issuer approved less than asked |
+| `AuthorizedAmount` | What was actually authorised. Equal to `Amount` unless partially approved |
 
 ---
 
@@ -1083,11 +731,32 @@ public abstract record EcrReceipt(string MerchantReference)
 }
 ```
 
-| Case          | Properties                      | Meaning                                                                                                           |
-| ------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `Ready`       | `Url: string`, `Raw: string`    | Put `Url` in a QR code as it stands                                                                               |
-| `Unavailable` | `Reason: string`, `Raw: string` | Not found, or the backend would not publish one; also what `EcrOpenedSession.ReceiptAsync` returns on Web Service |
-| `Failed`      | `Failure: Failure`              | The exchange failed. Safe to retry                                                                                |
+| Case | Meaning |
+|---|---|
+| `Ready` | Put `Url` in a QR code as it stands |
+| `Unavailable` | Not found, or the backend would not publish one (an empty `receiptUrl` is never a receipt); also what `EcrOpenedSession.ReceiptAsync` returns on Web Service. Harmless |
+| `Failed` | The exchange failed. Safe to retry |
+
+---
+
+## EcrReceiptClosed
+
+```csharp
+public abstract record EcrReceiptClosed(string MerchantReference)
+{
+    public sealed record Idle(string MerchantReference, string Raw)
+    public sealed record Refused(string MerchantReference, string ResponseCode, string Reason, string Raw)
+    public sealed record Failed(string MerchantReference, Failure Failure)
+}
+```
+
+The answer to `CloseReceiptAsync` (1.0.2). Success is read from the envelope alone.
+
+| Case | Meaning |
+|---|---|
+| `Idle` | The terminal is on its idle screen, whether or not it had a receipt up. Safe to repeat |
+| `Refused` | The terminal or Hub answered `success: false` (for example firmware too old for `CLOSE_RECEIPT`, or a Web Service transport error with `ResponseCode == "NO_RESPONSE"`). Treat as "cannot be asked" and carry on |
+| `Failed` | The exchange failed, or Web Service was asked with no original reference. Nothing was changed; safe to retry |
 
 ---
 
@@ -1096,7 +765,7 @@ public abstract record EcrReceipt(string MerchantReference)
 ```csharp
 public abstract record Failure(string Message)
 {
-    public bool OutcomeUnknown { get; }
+    public bool OutcomeUnknown { get; }   // false only for Unreachable
 
     public sealed record Unreachable(string Message)
     public sealed record Timeout(string Message)
@@ -1106,59 +775,43 @@ public abstract record Failure(string Message)
 }
 ```
 
-Why an exchange could not be completed. `OutcomeUnknown` is `false` only for
-[Unreachable](#failure) — everything else means the request may have reached the
-terminal and the payment outcome is not settled.
+Why an exchange could not be completed.
 
-| Case              | Meaning                                                                                               | Did the payment happen?   |
-| ----------------- | ----------------------------------------------------------------------------------------------------- | ------------------------- |
-| `Unreachable`     | Nothing is listening: wrong address, terminal off, different network, or the **connect** timed out    | **No** — nothing was sent |
-| `Timeout`         | The request was written but the terminal never answered within `ResponseTimeout`                      | **Unknown**               |
-| `ConnectionLost`  | The connection reset, aborted or closed after the request was written, or part way through the answer | **Unknown**               |
-| `Unauthenticated` | LAN: answer failed signature or nonce check                                                           | **Unknown**               |
-| `Malformed`       | The answer could not be read (empty, or not JSON)                                                     | **Unknown**               |
+| Case | Meaning | Payment happened? |
+|---|---|---|
+| `Unreachable` | Nothing is listening: wrong address, terminal off, different network, or the **connect** timed out | **No**; nothing was sent |
+| `Timeout` | The request was written but no answer came within `ResponseTimeout` | **Unknown** |
+| `ConnectionLost` | The connection reset, aborted or closed after the request was written, or part-way through the answer | **Unknown** |
+| `Malformed` | The answer could not be read (empty, or not JSON). On Web Service: non-numeric `MerchantId` / `TerminalId`, nothing sent | **Unknown** (LAN) |
+| `Unauthenticated` | LAN: the answer failed the signature or nonce check | **Unknown** |
 
-> **`Timeout`, `ConnectionLost` and `Unauthenticated` do not mean the payment
-> did not happen.** On LAN, the terminal may have completed it and been unable to
-> say so. Treating any of them as a decline and retrying is how a customer gets
-> charged twice. Resolve with `InquireAsync()` / `InquireByReferenceAsync()` on
-> either transport, or reconcile against the terminal before retrying.
+`Timeout`, `ConnectionLost`, `Malformed` and `Unauthenticated` do not mean the payment
+did not happen. Resolve with `InquireAsync` / `InquireByReferenceAsync`, or reconcile
+against the terminal, before retrying.
 
-`Unauthenticated` on LAN almost always means a mismatched **Wi‑Fi/LAN** key. On
-Web Service, authentication failures come from the Hub (wrong **Web Service** key
-or environment) and reach you through the Hub's answer as a `Declined`, never as `Unauthenticated`.
+`Unauthenticated` almost always means a mismatched Wi-Fi/LAN key. `EcrWebServiceTerminal`
+never produces `Unreachable` or `Unauthenticated`; Hub authentication failures arrive
+as `Declined`.
 
-`EcrWebServiceTerminal` never produces `Timeout`, `Unreachable` or `Unauthenticated`.
-Its only uses of `Failure` are `Malformed` (non-numeric `MerchantId` / `TerminalId`)
-and, on `InquireAsync` / `InquireByReferenceAsync`, `ConnectionLost` for an
-inquiry whose own request hit a transport failure (`EcrInquiry.Failed`).
-
-**A custom channel decides which of these it gets**: the SDK classifies an
-`IOException` from an `IEcrChannel` by its message — `closed the connection` →
-`ConnectionLost`; `not valid JSON` or `empty message` → `Malformed`; anything else
-→ `Unreachable`. See [IEcrChannel](#iecrchannel).
+**A custom channel decides which of these it gets.** The SDK classifies an
+`IOException` from an `IEcrChannel` by its message: `closed the connection` becomes
+`ConnectionLost`; `not valid JSON` or `empty message` becomes `Malformed`; anything
+else becomes `Unreachable`. See [IEcrChannel](#iecrchannel).
 
 ---
 
 ## NextStep
 
 ```csharp
-public enum NextStep
-{
-    None,
-    InquireByMerchantReference,
-}
+public enum NextStep { None, InquireByMerchantReference }
 ```
 
-What the till should do when an outcome cannot be acted on directly.
+| Value | Meaning |
+|---|---|
+| `None` | The answer settles the matter |
+| `InquireByMerchantReference` | Look the transaction up by the reference this request was sent with. **Never retry the sale instead** |
 
-| Value                        | Meaning                                                                                                |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `None`                       | The answer settles the matter                                                                          |
-| `InquireByMerchantReference` | Look up the transaction by the reference this request was sent with — **never retry the sale instead** |
-
-Exposed on [EcrResult.Declined](#ecrresultdeclined) (from the terminal when it
-knows the outcome is uncertain) and on [EcrResult.Failed](#ecrresultfailed) (always
+Exposed on `Declined` (always `None` as built by this SDK) and on `Failed` (always
 `InquireByMerchantReference`). An unrecognised wire value reads as `None`.
 
 ---
@@ -1166,24 +819,17 @@ knows the outcome is uncertain) and on [EcrResult.Failed](#ecrresultfailed) (alw
 ## EcrReachability
 
 ```csharp
-public sealed record EcrReachability(
-    bool Reachable,
-    string Host,
-    int Port,
-    string? Error = null,
-    string? Endpoint = null)
+public sealed record EcrReachability(bool Reachable, string Host, int Port, string? Error = null, string? Endpoint = null)
 {
     public string Endpoint { get; init; }
 }
 ```
 
-Result of [EcrTerminal.ProbeReachabilityAsync](#probereachabilityasync). When
-`Reachable` is `false`, `Error` carries the platform message (`connection refused`,
-timed out, host unreachable, …).
-
+Result of `EcrTerminal.ProbeReachabilityAsync`. When `Reachable` is false, `Error`
+carries the platform message (connection refused, timed out, host unreachable).
 `Endpoint` is what to show an operator: `host:port` for a socket, the channel's own
-name for a link with no address (a cable fills `Host` and `Port` with what it has,
-`Port` being 0). It defaults to `Host:Port` when `Port > 0`, otherwise `Host`.
+name for a link with no address (`Port` 0). It defaults to `Host:Port` when
+`Port > 0`, otherwise `Host`.
 
 ---
 
@@ -1201,41 +847,34 @@ public interface IEcrChannel
 }
 ```
 
-How bytes reach a terminal, and nothing else. Signing the request, checking the
-answer and reading response codes stay in [EcrTerminal](#ecrterminal) and are
-identical however the bytes travel — a channel is never asked to decide
-anything, so a new one cannot weaken what is already there.
+How bytes reach a terminal, and nothing else. Signing, answer checks and response
+codes stay in `EcrTerminal`, so a new channel cannot weaken them.
 
-| Member          | Description                                                                                                                                                       |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Endpoint`      | What to show an operator when this link fails                                                                                                                     |
-| `Host` / `Port` | The address side of [EcrReachability](#ecrreachability). A cable has no host and no port: it reports its own name and a port of `0`                               |
-| `ProbeAsync`    | Whether the terminal can be reached. Returns `null` when reachable, otherwise the reason                                                                          |
-| `ExchangeAsync` | Sends one request body and returns the answer body. **Framing is the channel's to apply** — use [EcrFrames](#ecrframes). `timeout` is `EcrConfig.ResponseTimeout` |
+| Member | Description |
+|---|---|
+| `Endpoint` | What to show an operator when this link fails |
+| `Host` / `Port` | The address side of [EcrReachability](#ecrreachability); a cable reports its own name and port `0` |
+| `ProbeAsync` | Returns `null` when reachable, otherwise the reason |
+| `ExchangeAsync` | Sends one request body, returns one answer body. **Framing is the channel's to apply** with [EcrFrames](#ecrframes). `timeout` is `EcrConfig.ResponseTimeout` |
 
-`TcpEcrChannel` ships with the SDK. **There is no USB channel** — implement this
-interface for your cable. A worked skeleton is in the
-[integration guide](integration-guide.md#usb-cable-ecr--bring-your-own-channel).
+`TcpEcrChannel` ships with the SDK; there is no USB channel. A worked skeleton is in
+the [integration guide](integration-guide.md#usb-cable-bring-your-own-channel).
 
-**Timeouts are not failures.** Throw [EcrChannelTimeout](#ecrchanneltimeout) when
-the terminal did not answer: the payment may have completed and the terminal been
-unable to say so, which the caller handles differently from a decline.
+**Throw [EcrChannelTimeout](#ecrchanneltimeout) when the terminal did not answer**:
+the payment may have completed. Exceptions from `ExchangeAsync` are classified:
 
-**Exceptions from `ExchangeAsync` are classified by the SDK:**
-
-| Thrown                                                                   | Becomes                                        |
-| ------------------------------------------------------------------------ | ---------------------------------------------- |
-| `EcrChannelTimeout`                                                      | `Failure.Timeout`                              |
-| `IOException` whose message contains `closed the connection`             | `Failure.ConnectionLost`                       |
-| `IOException` whose message contains `not valid JSON` or `empty message` | `Failure.Malformed`                            |
-| any other `IOException`                                                  | **`Failure.Unreachable` — "nothing was sent"** |
-| `OperationCanceledException` (your token)                                | rethrown, not a result                         |
-| anything else                                                            | propagates out of the operation method         |
+| Thrown | Becomes |
+|---|---|
+| `EcrChannelTimeout` | `Failure.Timeout` |
+| `IOException` containing `closed the connection` | `Failure.ConnectionLost` |
+| `IOException` containing `not valid JSON` or `empty message` | `Failure.Malformed` |
+| any other `IOException` | **`Failure.Unreachable` ("nothing was sent")** |
+| `OperationCanceledException` (your token) | rethrown, not a result |
+| anything else | propagates out of the operation method |
 
 Once the request may have been written, wrap a broken link as
-`new IOException("Terminal closed the connection: …")`, as `TcpEcrChannel` does —
-otherwise a lost payment is reported as safe to retry. Before anything is written,
-a plain `IOException` is right.
+`new IOException("Terminal closed the connection: ...")`, as `TcpEcrChannel` does;
+otherwise a lost payment is reported as safe to retry.
 
 ---
 
@@ -1251,28 +890,22 @@ public sealed class TcpEcrChannel : IEcrChannel
     public string Host { get; }
     public int Port { get; }
     public string Endpoint { get; }   // "host:port"
-
-    public Task<string?> ProbeAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
-    public Task<byte[]> ExchangeAsync(byte[] body, TimeSpan timeout, CancellationToken cancellationToken = default)
 }
 ```
 
-The terminal over TCP. One connection carries one request and one answer:
-connect, send, wait for the cardholder, read the result, disconnect. Normally you
-do not construct it — `new EcrTerminal(host, …)` and `EcrSessions.LanTerminal` do,
-using `EcrConfig.ConnectTimeout` (10 s), not this class's own 3 s default.
+The terminal over TCP: one connection carries one request and one answer. Normally
+you do not construct it: `new EcrTerminal(host, ...)` and `LanTerminal` do, using
+`EcrConfig.ConnectTimeout` (10 s), not this class's 3 s default.
 
-Failure behaviour, which `EcrTerminal` maps to `Failure`:
-
-| Situation                                   | Thrown                                                              | Result           |
-| ------------------------------------------- | ------------------------------------------------------------------- | ---------------- |
-| Refused, no route, unknown host             | `IOException`                                                       | `Unreachable`    |
-| Connect timeout                             | `IOException("Connection timed out after N ms")`                    | `Unreachable`    |
-| Request written, no answer within `timeout` | `EcrChannelTimeout`                                                 | `Timeout`        |
-| Reset/abort after the request was written   | `IOException("Terminal closed the connection: …")`                  | `ConnectionLost` |
-| Closed while sending the header or body     | `IOException("Terminal closed the connection while sending the …")` | `ConnectionLost` |
-| Empty message                               | `IOException("Terminal returned an empty message")`                 | `Malformed`      |
-| Your token cancelled                        | `OperationCanceledException`                                        | rethrown         |
+| Situation | Thrown | Result |
+|---|---|---|
+| Refused, no route, unknown host | `IOException` | `Unreachable` |
+| Connect timeout | `IOException("Connection timed out after N ms")` | `Unreachable` |
+| Request written, no answer within `timeout` | `EcrChannelTimeout` | `Timeout` |
+| Reset or abort after the request was written | `IOException("Terminal closed the connection: ...")` | `ConnectionLost` |
+| Closed while sending the header or body | `IOException("Terminal closed the connection while sending the ...")` | `ConnectionLost` |
+| Empty message | `IOException("Terminal returned an empty message")` | `Malformed` |
+| Your token cancelled | `OperationCanceledException` | rethrown |
 
 ---
 
@@ -1304,22 +937,20 @@ public static class EcrFrames
 }
 ```
 
-Two bytes of big-endian length, then UTF-8 JSON. Public so a channel outside
-this library frames the same way — a second private implementation of "two
-bytes then the body" is a second chance to get it subtly wrong. Note that one
-read is not one message: a transfer may carry several, or half of one.
+Two bytes of big-endian length, then UTF-8 JSON. Public so an external channel frames
+identically. One read is not one message: a transfer may carry several, or half of
+one.
 
-| Member                     | Description                                                                                                                         |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `Wrap(body)`               | Puts the length header in front of `body`. Throws `IOException` if `body` is longer than `MaxBodyBytes`                             |
-| `BodyLength(header)`       | The body length a 2-byte header announces                                                                                           |
-| `ReadBody(input)`          | Reads exactly one message body, **blocking** until it arrives or the stream's own read timeout fires. Do not call it on a UI thread |
-| `ReadBodyAsync(input, ct)` | Asynchronous `ReadBody`                                                                                                             |
+| Member | Description |
+|---|---|
+| `Wrap(body)` | Prepends the length header. Throws `IOException` if `body` exceeds `MaxBodyBytes` |
+| `BodyLength(header)` | The body length a 2-byte header announces |
+| `ReadBody(input)` | Reads exactly one body, **blocking**. Do not call it on a UI thread |
+| `ReadBodyAsync(input, ct)` | Asynchronous `ReadBody` |
 
-`ReadBody` / `ReadBodyAsync` throw `IOException("Terminal closed the connection
-while sending the …")` if the stream ends early and `IOException("Terminal returned
-an empty message")` for a zero-length body; both are classified as described under
-[IEcrChannel](#iecrchannel).
+Both read methods throw `IOException` ("Terminal closed the connection while sending
+the ...") if the stream ends early and ("Terminal returned an empty message") for a
+zero-length body; both are classified as described under [IEcrChannel](#iecrchannel).
 
 ---
 
@@ -1338,21 +969,11 @@ public static class EcrLogger
 }
 ```
 
-The SDK has no logging framework of its own, so a client can route this to
-`Microsoft.Extensions.Logging`, Serilog, the Windows Event Log or a plain file, and
-none inherits a dependency it did not ask for. `From(null)` throws
-`ArgumentNullException`.
-
-```csharp
-EcrLogger.From(message => Debug.WriteLine(message, "Ecr"));                    // LAN
-EcrLogger.From(message => Debug.WriteLine(message, "EcrWebService"));          // Web Service
-EcrLogger.From(message => logger.LogDebug("{EcrMessage}", message));           // Microsoft.Extensions.Logging
-EcrLogger.From(message => Log.Debug("{EcrMessage}", message));                 // Serilog
-```
-
-Messages include signing diagnostics. **No part of a secret is ever logged** — a key is
-reported only as `configured` or `not configured`. Payload strings and hashes may still
-appear; treat them as transaction records.
+No logging framework dependency: route to `Microsoft.Extensions.Logging`, Serilog, the
+Event Log or a file. `From(null)` throws `ArgumentNullException`. Messages include
+signing diagnostics; no part of a secret is ever logged (a key is reported only as
+`configured` or `not configured`), but payloads and hashes may appear, so treat logs
+as transaction records.
 
 ---
 
@@ -1360,13 +981,8 @@ appear; treat them as transaction records.
 
 ```csharp
 public sealed record EcrWireResponse(
-    bool Success,
-    string ResponseCode,
-    string Message,
-    JsonObject? Data,
-    IReadOnlyList<string> ErrorList,
-    string Nonce = "",
-    string SecureHash = "")
+    bool Success, string ResponseCode, string Message, JsonObject? Data,
+    IReadOnlyList<string> ErrorList, string Nonce = "", string SecureHash = "")
 {
     public string MerchantReference { get; }
     public string TerminalSerial { get; }
@@ -1377,33 +993,26 @@ public sealed record EcrWireResponse(
 }
 ```
 
-The unified ECR response envelope — `{ success, responseCode, message, data,
-errorList, nonce?, secureHash? }` — read from the terminal's or Hub's JSON.
-`JsonObject` is `System.Text.Json.Nodes.JsonObject`. You rarely need this: the
-result types already carry the useful readings. It is handy for inspecting a `Raw`
-string.
+The unified response envelope `{ success, responseCode, message, data, errorList,
+nonce?, secureHash? }` read from the terminal's or Hub's JSON (`JsonObject` is
+`System.Text.Json.Nodes.JsonObject`). You rarely need it; it is handy for inspecting a
+`Raw` string.
 
-| Member                                 | Description                                                                                                              |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `Parse(JsonObject)`                    | Reads the wire JSON, including legacy flat shapes (`approved`, `responseMessage`) and answers nested under `ecrResponse` |
-| `DisplayMessage`                       | User-facing text: `ErrorList` entries first (joined by newlines), then `Message`                                         |
-| `MerchantReference`                    | From `Data` (`merchantReference`, then `merchantReferenceId`, then `requestId`); empty if none                           |
-| `TerminalSerial`                       | `Data`'s `terminalSerial`, or empty                                                                                      |
-| `DisplayMessageFromRaw(raw, fallback)` | `DisplayMessage` of a raw JSON string; `fallback` when it is empty or invalid                                            |
-
-```csharp
-var wire = EcrWireResponse.Parse((JsonObject)JsonNode.Parse(declined.Raw)!);   // declined: EcrResult.Declined
-bool noResponse = wire.ResponseCode == "NO_RESPONSE";   // but branch on Declined.NextStep, not on this
-```
+| Member | Description |
+|---|---|
+| `Parse(JsonObject)` | Reads the wire JSON, including legacy flat shapes (`approved`, `responseMessage`) and answers nested under `ecrResponse` |
+| `DisplayMessage` | `ErrorList` entries first (joined by newlines), then `Message` |
+| `MerchantReference` | From `Data` (`merchantReference`, then `merchantReferenceId`, then `requestId`); empty if none |
+| `TerminalSerial` | `Data`'s `terminalSerial`, or empty |
+| `DisplayMessageFromRaw(raw, fallback)` | `DisplayMessage` of a raw JSON string; `fallback` when empty or invalid |
 
 ---
 
 ## Web Service request types
 
-Namespace `AmwalPay.Ecr.WebService`. Public, optional building blocks for advanced
-integrators who want the signed JSON body without the terminal classes — mainly for
-tests and custom HTTP clients. [EcrWebServiceTerminal](#ecrwebserviceterminal)
-builds its requests internally and auto-fills timestamps.
+Namespace `AmwalPay.Ecr.WebService`. Optional building blocks for the signed JSON
+body without the terminal classes (tests, custom HTTP clients).
+`EcrWebServiceTerminal` builds its requests internally and fills timestamps.
 
 ```csharp
 public interface IEcrWebServiceRequest
@@ -1415,46 +1024,30 @@ public interface IEcrWebServiceRequest
 }
 
 public sealed record EcrWebServiceSaleRequest(
-    long MerchantId,
-    long TerminalId,
-    string TerminalSerial,
-    long AmountMinorUnits,
-    string MerchantReference = "",
-    string CurrencyCode = "512",
-    string EcrId = "ECR01",
+    long MerchantId, long TerminalId, string TerminalSerial, long AmountMinorUnits,
+    string MerchantReference = "", string CurrencyCode = "512", string EcrId = "ECR01",
     string TransactionDateTime = "") : IEcrWebServiceRequest;
 
 public sealed record EcrWebServiceVoidRequest(
-    long MerchantId,
-    long TerminalId,
-    string TerminalSerial,
-    string Stan,
-    string MerchantReference = "",
-    string CurrencyCode = "512",
-    string EcrId = "ECR01",
+    long MerchantId, long TerminalId, string TerminalSerial, string Stan,
+    string MerchantReference = "", string CurrencyCode = "512", string EcrId = "ECR01",
     string TransactionDateTime = "") : IEcrWebServiceRequest;
 
 public sealed record EcrWebServiceRefundRequest(
-    long MerchantId,
-    long TerminalId,
-    string TerminalSerial,
-    long AmountMinorUnits,
-    string Stan,
-    string OriginalTransactionDate,
-    string MerchantReference = "",
-    string CurrencyCode = "512",
-    string EcrId = "ECR01",
+    long MerchantId, long TerminalId, string TerminalSerial, long AmountMinorUnits,
+    string Stan, string OriginalTransactionDate, string MerchantReference = "",
+    string CurrencyCode = "512", string EcrId = "ECR01",
     string TransactionDateTime = "") : IEcrWebServiceRequest;
 
 public sealed record EcrWebServiceTransactionStatusRequest(
-    long MerchantId,
-    long TerminalId,
-    string TerminalSerial,
-    string Stan,
-    string OriginalTransactionDate,
-    string MerchantReference = "",
-    string CurrencyCode = "512",
-    string EcrId = "ECR01",
+    long MerchantId, long TerminalId, string TerminalSerial, string Stan = "",
+    string OriginalTransactionDate = "", string MerchantReference = "",
+    string CurrencyCode = "512", string EcrId = "ECR01", string TransactionDateTime = "",
+    string OriginalMerchantReference = "") : IEcrWebServiceRequest;
+
+public sealed record EcrWebServiceCloseReceiptRequest(
+    long MerchantId, long TerminalId, string TerminalSerial, string OriginalMerchantReference,
+    string MerchantReference = "", string EcrId = "ECR01",
     string TransactionDateTime = "") : IEcrWebServiceRequest;
 
 public static class EcrWebServiceRequestJson
@@ -1464,24 +1057,25 @@ public static class EcrWebServiceRequestJson
     public static JsonObject Refund(EcrWebServiceRefundRequest request, string secureHashKey = "")
     public static JsonObject TransactionStatus(EcrWebServiceTransactionStatusRequest request, string secureHashKey = "")
     public static JsonObject Inquiry(EcrWebServiceTransactionStatusRequest request, string secureHashKey = "")   // same as TransactionStatus
+    public static JsonObject CloseReceipt(EcrWebServiceCloseReceiptRequest request, string secureHashKey = "")   // 1.0.2
 }
 ```
 
-| Property                  | Description                                                  |
-| ------------------------- | ------------------------------------------------------------ |
-| `AmountMinorUnits`        | Amount in minor units (OMR: 3 decimals, e.g. `111` → 0.111)  |
-| `Stan`                    | Receipt number of the original transaction                   |
-| `OriginalTransactionDate` | Original transaction date as `yyyyMMdd`                      |
-| `TransactionDateTime`     | `yyyyMMddHHmmss`; left empty, the current local time is used |
+| Property | Description |
+|---|---|
+| `AmountMinorUnits` | Amount in minor units (OMR: 3 decimals, `111` is 0.111) |
+| `Stan` | Receipt number of the original transaction |
+| `OriginalTransactionDate` | `yyyyMMdd` |
+| `OriginalMerchantReference` | Status request: set (with empty `Stan`) to inquire by reference. Close receipt: the sale / void / refund reference (required) |
+| `TransactionDateTime` | `yyyyMMddHHmmss`; left empty, the current local time is used |
 
-The positional order differs from the Android SDK's (`AmountMinorUnits` comes before
-`MerchantReference` here) — use named arguments.
+Record parameter order is positional; use named arguments.
 
 ```csharp
 var request = new EcrWebServiceSaleRequest(
     MerchantId: 13593,
     TerminalId: 101311,
-    TerminalSerial: "P653200008251-Web",
+    TerminalSerial: "P653200008251",
     AmountMinorUnits: 1234,
     MerchantReference: "REF-1586");
 
@@ -1489,65 +1083,31 @@ JsonObject body = EcrWebServiceRequestJson.Sale(request, secureHashKey: webServi
 // POST body.ToJsonString() to <Hub base>/Ecr/Sale
 ```
 
-With a non-empty `secureHashKey` the body carries `secureHashValue`; with the
-default empty key it is unsigned. A key that cannot be decoded throws
-`ArgumentException`. The wire format and paths are in the
-[protocol](protocol.md#9-web-service-rest).
+With a non-empty `secureHashKey` the body carries `secureHashValue`; with the default
+empty key it is unsigned. A key that cannot be decoded throws `ArgumentException`.
+`CloseReceipt` throws `ArgumentException` if `OriginalMerchantReference` is blank.
+Field lists and paths: [protocol](protocol.md#9-web-service-rest).
 
 ---
 
-## Appendix: Kotlin → C# name map
+## Appendix: Android SDK name differences
 
-For teams that already use the Android SDK (`com.amwalpay.ecr`). The wire protocol
-is identical; the .NET API follows .NET conventions.
+For teams that also use the Android SDK (`com.amwalpay.ecr`). The wire protocol is
+identical; names follow .NET conventions (`camelCase` members become `PascalCase`,
+`suspend fun sale` becomes `SaleAsync`, and so on). The non-obvious differences:
 
-| Kotlin                                                                                                                                                                                      | C#                                                                                                                                                                                                                        |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `package com.amwalpay.ecr`                                                                                                                                                                  | `namespace AmwalPay.Ecr` (Web Service request types: `AmwalPay.Ecr.WebService`)                                                                                                                                           |
-| `suspend fun sale(amount, merchantReference)`                                                                                                                                               | `Task<EcrResult> SaleAsync(decimal amount, string merchantReference = "", CancellationToken cancellationToken = default)`                                                                                                 |
-| `void`, `refund`, `inquire`, `inquireByReference`, `receipt`, `run`                                                                                                                         | `VoidAsync`, `RefundAsync`, `InquireAsync`, `InquireByReferenceAsync`, `ReceiptAsync`, `RunAsync`                                                                                                                         |
-| `isReachable()`, `probeReachability()`                                                                                                                                                      | `IsReachableAsync()`, `ProbeReachabilityAsync()`                                                                                                                                                                          |
-| `BigDecimal`                                                                                                                                                                                | `decimal`                                                                                                                                                                                                                 |
-| `kotlin.time.Duration` (`120.seconds`)                                                                                                                                                      | `TimeSpan` (`TimeSpan.FromSeconds(120)`)                                                                                                                                                                                  |
-| `Dispatchers.IO` / `io:` parameter                                                                                                                                                          | none — `await` it; no dispatcher parameter                                                                                                                                                                                |
-| coroutine cancellation                                                                                                                                                                      | `CancellationToken` (throws `OperationCanceledException`)                                                                                                                                                                 |
-| `IllegalArgumentException`                                                                                                                                                                  | `ArgumentException`                                                                                                                                                                                                       |
-| `EcrTerminal(host, serialNumber, config, logger, io)`                                                                                                                                       | `new EcrTerminal(host, serialNumber, config, logger)`; also `new EcrTerminal(IEcrChannel channel, …)`                                                                                                                     |
-| `EcrConfig(ecrId = …, secureHashKey = …)` (constructor)                                                                                                                                     | `new EcrConfig { EcrId = …, SecureHashKey = … }` (`init` properties)                                                                                                                                                      |
-| `config.copy(responseTimeout = …)`                                                                                                                                                          | `config with { ResponseTimeout = … }`                                                                                                                                                                                     |
-| `EcrConfig.DEFAULT_PORT`                                                                                                                                                                    | `EcrConfig.DefaultPort`                                                                                                                                                                                                   |
-| `EcrConfig.isValidSecureHashKey(key)`                                                                                                                                                       | `EcrConfig.IsValidSecureHashKey(key)`                                                                                                                                                                                     |
-| `ecrId`, `currencyCode`, `minorUnitDigits`, `port`, `connectTimeout`, `responseTimeout`, `probeTimeout`, `secureHashKey`, `merchantId`, `terminalId`, `environment`, `autoInquireOnFailure` | the same names in PascalCase: `EcrId`, `CurrencyCode`, `MinorUnitDigits`, `Port`, `ConnectTimeout`, `ResponseTimeout`, `ProbeTimeout`, `SecureHashKey`, `MerchantId`, `TerminalId`, `Environment`, `AutoInquireOnFailure` |
-| `EcrSessions.plan(link, config, rawSecureHashKey)`                                                                                                                                          | `EcrSessions.Plan(link, config, rawSecureHashKey)`                                                                                                                                                                        |
-| `EcrSessions.open(…, usbChannel, logger)`                                                                                                                                                   | `EcrSessions.Open(terminalSerial, plan, usbChannel, logger)`                                                                                                                                                              |
-| `EcrSessions.lanTerminal` / `usbCableTerminal` / `webServiceTerminal`                                                                                                                       | `LanTerminal` / `UsbCableTerminal` / `WebServiceTerminal`                                                                                                                                                                 |
-| `EcrLink.Lan(host, port)`                                                                                                                                                                   | `new EcrLink.Lan(Host, Port)`                                                                                                                                                                                             |
-| `EcrLink.UsbCable` (object)                                                                                                                                                                 | `new EcrLink.UsbCable()`                                                                                                                                                                                                  |
-| `EcrLink.WebService(merchantId, terminalId)`                                                                                                                                                | `new EcrLink.WebService(MerchantId, TerminalId)`                                                                                                                                                                          |
-| `plan.isReady`, `plan.issues`, `usesLan`, `usesWebService`, `usesUsbCable`, `signingKeyLabel`, `signingKeyConfigured`, `connectionSummary`                                                  | `IsReady`, `Issues`, `UsesLan`, `UsesWebService`, `UsesUsbCable`, `SigningKeyLabel`, `SigningKeyConfigured`, `ConnectionSummary`                                                                                          |
-| `EcrOpenedSession.probeReachability()` → `EcrReachability?`                                                                                                                                 | `ProbeReachabilityAsync()` → `Task<EcrReachability?>`                                                                                                                                                                     |
-| `EcrOpenedSession.inquire(receiptNumber, transactionDate, originalTerminalId)`                                                                                                              | `InquireAsync(receiptNumber, transactionDate, originalTerminalId, cancellationToken)` (no `merchantReference`)                                                                                                            |
-| `EcrEnvironment.DEFAULT`                                                                                                                                                                    | `EcrEnvironments.Default`                                                                                                                                                                                                 |
-| `EcrEnvironment.fromName(name)`                                                                                                                                                             | `EcrEnvironments.FromName(name)`                                                                                                                                                                                          |
-| `EcrTransactionType.SALE`, `VOID`, `REFUND`, `INQUIRY`, `RECEIPT`                                                                                                                           | `EcrTransactionType.Sale`, `Void`, `Refund`, `Inquiry`, `Receipt`                                                                                                                                                         |
-| `type.messageType`, `displayName`, `requiresAmount`, `requiresOriginalStan`, `requiresOriginalDate`, `allowsOtherTerminal`, `movesMoney`                                                    | `type.MessageType()`, `DisplayName()`, `RequiresAmount()`, `RequiresOriginalStan()`, `RequiresOriginalDate()`, `AllowsOtherTerminal()`, `MovesMoney()` (extension methods)                                                |
-| `EcrTransactionType.menuOptions`                                                                                                                                                            | `EcrTransactionTypes.MenuOptions`                                                                                                                                                                                         |
-| `EcrResult.Approved(merchantReference, amount, …)` (`sealed interface`, data classes)                                                                                                       | `EcrResult.Approved(MerchantReference, Amount, …)` (abstract `record`, sealed nested records)                                                                                                                             |
-| `when (result) { is EcrResult.Approved -> … }`                                                                                                                                              | `switch (result) { case EcrResult.Approved a: … }` or `result switch { EcrResult.Approved a => … }`                                                                                                                       |
-| `result.recovered`, `result.settled`, `result.nextStep`                                                                                                                                     | `f.Recovered`, `f.Settled`, `f.NextStep`                                                                                                                                                                                  |
-| `NextStep.NONE`, `NextStep.INQUIRE_BY_MERCHANT_REFERENCE`                                                                                                                                   | `NextStep.None`, `NextStep.InquireByMerchantReference`                                                                                                                                                                    |
-| `Failure.Unreachable`, `Timeout`, `ConnectionLost`, `Malformed`, `Unauthenticated`                                                                                                          | same names, nested in `Failure`; `failure.outcomeUnknown` → `Failure.OutcomeUnknown`                                                                                                                                      |
-| `EcrInquiry.Found` / `NotFound` / `Failed`; `EcrReceipt.Ready` / `Unavailable` / `Failed`                                                                                                   | same names; `Transaction`, `Raw`, `Reason`, `Url`, `Failure` in PascalCase                                                                                                                                                |
-| `EcrTransaction.isRefunded`, `canVoid`, `canRefund`                                                                                                                                         | `IsRefunded`, `CanVoid`, `CanRefund`                                                                                                                                                                                      |
-| `EcrReachability(reachable, host, port, error)`                                                                                                                                             | `EcrReachability(Reachable, Host, Port, Error, Endpoint)` — `Endpoint` added                                                                                                                                              |
-| `EcrChannel { endpoint; probe(timeout): String?; exchange(body, timeout): ByteArray }`                                                                                                      | `IEcrChannel { Endpoint; Host; Port; ProbeAsync(timeout, ct): Task<string?>; ExchangeAsync(body, timeout, ct): Task<byte[]> }` — `Host` / `Port` added, methods async                                                     |
-| `EcrChannelTimeout`                                                                                                                                                                         | `EcrChannelTimeout : IOException`                                                                                                                                                                                         |
-| `EcrFrames.wrap`, `bodyLength`, `readBody(InputStream)`                                                                                                                                     | `EcrFrames.Wrap`, `BodyLength`, `ReadBody(Stream)`, plus `ReadBodyAsync`, `HeaderBytes`, `MaxBodyBytes`                                                                                                                   |
-| `TcpEcrChannel`                                                                                                                                                                             | `TcpEcrChannel` (`new TcpEcrChannel(host, port, connectTimeout)`)                                                                                                                                                         |
-| `UsbAccessoryEcrChannel` (app code, Android)                                                                                                                                                | none — supply your own `IEcrChannel`                                                                                                                                                                                      |
-| `fun interface EcrLogger { fun debug(message) }`, `EcrLogger.None`, `EcrLogger { … }`                                                                                                       | `interface IEcrLogger { void Debug(string message); }`, `EcrLogger.None`, `EcrLogger.From(message => …)`                                                                                                                  |
-| `EcrWireResponse`                                                                                                                                                                           | `EcrWireResponse` (same; `Data` is `System.Text.Json.Nodes.JsonObject?`)                                                                                                                                                  |
-| `EcrWebServiceRequestJson.sale(request, key)`                                                                                                                                               | `EcrWebServiceRequestJson.Sale(request, secureHashKey)`                                                                                                                                                                   |
-| `EcrWebServiceSaleRequest(merchantId, terminalId, terminalSerial, merchantReference, amountMinorUnits, …)`                                                                                  | `EcrWebServiceSaleRequest(MerchantId, TerminalId, TerminalSerial, AmountMinorUnits, MerchantReference, …)` — **order differs**                                                                                            |
-| `EcrWebServiceRequest`                                                                                                                                                                      | `IEcrWebServiceRequest`                                                                                                                                                                                                   |
-| Log tags (`Log.d("Ecr", …)`)                                                                                                                                                                | `Debug.WriteLine(message, "Ecr")` or your logging framework                                                                                                                                                               |
+| Android (Kotlin) | .NET |
+|---|---|
+| `EcrConfig(...)` constructor and `config.copy(...)` | `new EcrConfig { ... }` and `config with { ... }` |
+| `kotlin.time.Duration`, `BigDecimal` | `TimeSpan`, `decimal` |
+| `io:` dispatcher parameter | none; `await` the call |
+| Coroutine cancellation | `CancellationToken`; throws `OperationCanceledException` |
+| `EcrOpenedSession.inquire(...)` | `InquireAsync(receiptNumber, transactionDate, originalTerminalId, cancellationToken)`; no `merchantReference` |
+| `EcrReachability(reachable, host, port, error)` | Adds `Endpoint` |
+| `EcrChannel` | `IEcrChannel` with `Host` / `Port` added and async methods |
+| `UsbAccessoryEcrChannel` (app code) | None; supply your own `IEcrChannel` |
+| `EcrFrames.wrap` / `readBody` | `Wrap`, `ReadBody`, plus `ReadBodyAsync`, `HeaderBytes`, `MaxBodyBytes` |
+| `EcrEnvironment.DEFAULT` / `fromName` | `EcrEnvironments.Default` / `FromName` |
+| Type flags as properties (`type.movesMoney`) | Extension methods (`type.MovesMoney()`) on `EcrTransactionTypes` |
+| `EcrWebServiceSaleRequest(..., merchantReference, amountMinorUnits, ...)` | `AmountMinorUnits` comes **before** `MerchantReference` |
+| `EcrWebServiceRequest` | `IEcrWebServiceRequest` |

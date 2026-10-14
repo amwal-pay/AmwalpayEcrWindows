@@ -1,36 +1,39 @@
 # Amwal ECR samples
 
-Samples for **`AmwalPay.Ecr` 1.0.0**. For a shareable Windows till build, prefer the
-published [AmwalECR-Windows-Example](https://github.com/amwal-pay/AmwalpayEcrWindowsExample)
-repository (WPF + web).
+Samples for **`AmwalPay.Ecr` 1.0.2**. For a shareable Windows till (WPF) and a web
+backend (ASP.NET Core), use the separate
+[AmwalpayEcrWindowsExample](https://github.com/amwal-pay/AmwalpayEcrWindowsExample)
+repository.
 
 ## AmwalPay.Ecr.Simulator
 
-Desktop sample that mirrors the Android **ECR-simulator** app: register terminals,
-pick SIT/UAT/PROD, keep separate Wi‑Fi vs Web Service secure-hash keys, and run
-Sale / Void / Refund / Inquiry (by STAN or merchant reference) through
-`AmwalPay.Ecr` (`EcrSessions` → `EcrOpenedSession`).
+A desktop sample that registers terminals, picks SIT / UAT / PROD, keeps separate
+Wi-Fi and Web Service secure-hash keys, and runs sale, void, refund, inquiry (by STAN
+or merchant reference) and close receipt through `EcrSessions` and
+`EcrOpenedSession`. Use it to exercise a terminal or the fake server without writing
+code. It is not a template for production code.
 
 ### UI host
 
 | Host SDK | UI |
 |---|---|
-| Windows + .NET **Windows Desktop** workload | **WinForms** (Transaction / Terminals / Settings tabs + log panel) |
-| macOS / Linux Homebrew SDK (no WindowsDesktop) | **Interactive console** with the same flows |
+| Windows with the .NET **Windows Desktop** workload | **WinForms**: Transaction / Terminals / Settings tabs and a log panel |
+| macOS / Linux (no Windows Desktop SDK) | **Interactive console** with the same flows |
 
 The project detects `Microsoft.NET.Sdk.WindowsDesktop` at build time and defines
-`AMWAL_ECR_WINFORMS` or `AMWAL_ECR_CONSOLE` accordingly.
+`AMWAL_ECR_WINFORMS` or `AMWAL_ECR_CONSOLE`.
 
 ### Requirements
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download)
-- On Windows: install the **.NET desktop development** workload (Visual Studio) or
-  the Windows Desktop runtime/SDK so WinForms builds
-- An Amwal POS terminal in Wi‑Fi or Web Service ECR mode (or the SDK fake terminal)
+- On Windows, the **.NET desktop development** workload so WinForms builds
+- An Amwal POS terminal in Wi-Fi or Web Service ECR mode, or the fake server
+  (`tools/fake_pos_server.py`; see
+  [Testing without hardware](../docs/integration-guide.md#12-testing-without-hardware))
 
 ### Run
 
-From the repo root:
+From the repository root:
 
 ```powershell
 dotnet build AmwalECR.sln
@@ -38,39 +41,30 @@ dotnet run --project samples/AmwalPay.Ecr.Simulator
 ```
 
 Or open `AmwalECR.sln` in Visual Studio, set **AmwalPay.Ecr.Simulator** as the
-startup project, and press F5 (WinForms on Windows).
+startup project and press F5.
 
 ### First-time setup
 
-1. **Settings** — choose Environment (SIT / UAT / PROD), set the Wi‑Fi / LAN
+1. **Settings**: choose the environment (SIT / UAT / PROD) and enter the Wi-Fi/LAN
    secure-hash key and the Web Service secure-hash key.
-2. **Terminals** — add a terminal:
-   - **Wi‑Fi**: serial, IP, port (default `9100`)
-   - **Web Service**: serial, merchant ID, terminal ID
-3. **Transaction** — select the terminal, pick an operation, send.
+2. **Terminals**: add a terminal.
+   - Wi-Fi: serial, IP, port (default `9100`)
+   - Web Service: serial, merchant ID, terminal ID
+3. **Transaction**: select the terminal, pick an operation, send.
 
-Persistence: `%LocalAppData%\AmwalPay.Ecr.Simulator\settings.json`
-(on macOS/Linux: `~/.local/share/AmwalPay.Ecr.Simulator/settings.json`).
+Settings are stored in `%LocalAppData%\AmwalPay.Ecr.Simulator\settings.json` (on
+macOS / Linux, the platform's local application data folder). The file holds the
+signing keys, so keep it out of source control.
 
-### SDK log
+### What it does and does not do
 
-WinForms: bottom panel + `Debug.WriteLine`.  
-Console: lines prefixed with `[log]`, plus menu option “Show recent log”.
-
-### Feature checklist vs Android ECR-simulator
-
-| Feature | Android | This sample |
-|---|---|---|
-| Wi‑Fi / LAN | Yes | Yes |
-| Web Service | Yes | Yes |
-| Environment SIT/UAT/PROD | Yes | Yes |
-| Separate LAN / WS hash keys | Yes | Yes |
-| Sale / Void / Refund / Inquiry | Yes | Yes |
-| Inquiry by STAN+date or merchant ref | Yes | Yes |
-| Result + raw JSON | Yes | Yes |
-| EcrSessions / EcrOpenedSession | Yes | Yes |
-| USB cable | Yes | Stubbed — not supported on Windows |
-| App to app | Yes | Stubbed — Android-only |
-| Bluetooth | Listed | Stubbed — not supported |
-| Sign-on / capability narrowing | Yes | Omitted (full menu) |
-| Receipt QR / print | Yes | Omitted |
+- Wi-Fi / LAN and Web Service; USB cable is stubbed (the package ships no USB channel).
+- Shows the SDK log (WinForms: bottom panel and `Debug.WriteLine`; console: lines
+  prefixed `[log]`, plus a "Show recent log" menu option) and the result with raw JSON.
+- Shows an operation countdown (120 s Wi-Fi, 130 s Web Service) and a Cancel button
+  that only stops waiting; a cancelled call is never reported as "cancelled".
+- Shows an unknown outcome (`Failed`) as "Not completed", never as a decline, and a
+  failed inquiry as a failure, not "Not found".
+- Close receipt is its own button (Wi-Fi `CLOSE_RECEIPT`, Web Service
+  `/Ecr/closeReceipt`), not tied to dismissing a dialog.
+- No e-receipt QR or printing, no sign-on or capability narrowing.

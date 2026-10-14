@@ -124,9 +124,13 @@ public sealed class TransactionFormState
             ReceiptNumber: LooksUpByReference ? "" : ReceiptNumber.Trim(),
             OriginalTerminalId: ShowOriginalTerminal ? OriginalTerminalId.Trim() : "",
             TransactionDate: ShowOriginalDate ? OriginalDateOnWire : "",
+            // By-reference inquiry: originalMerchantReference = what to look up;
+            // merchantReference = this inquiry's own id (blank → SDK generates).
+            // Never copy the original into merchantReference — that made both
+            // wire fields the same and broke Hub correlation.
             OriginalReference: LooksUpByReference ? OriginalReference.Trim() : "",
             MerchantReference: LooksUpByReference
-                ? OriginalReference.Trim()
+                ? ""
                 : ShowMerchantReference ? MerchantReference.Trim() : "");
 
         return (this, request);

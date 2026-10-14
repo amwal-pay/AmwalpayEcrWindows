@@ -46,13 +46,21 @@ namespace AmwalPay.Ecr
         /// in front of them.
         /// </summary>
         Receipt,
+
+        /// <summary>
+        /// Asks the terminal to put its receipt away and return to idle.
+        /// Run it with <see cref="EcrTerminal.CloseReceiptAsync"/> or
+        /// <see cref="EcrOpenedSession.CloseReceiptAsync"/>. Not a menu choice.
+        /// </summary>
+        CloseReceipt,
     }
 
     public static class EcrTransactionTypes
     {
         /// <summary>
         /// The operations an operator picks from, in the order a till usually
-        /// offers them. <see cref="EcrTransactionType.Receipt"/> is absent by design.
+        /// offers them. <see cref="EcrTransactionType.Receipt"/> and
+        /// <see cref="EcrTransactionType.CloseReceipt"/> are absent by design.
         /// </summary>
         public static IReadOnlyList<EcrTransactionType> MenuOptions { get; } = new[]
         {
@@ -70,6 +78,7 @@ namespace AmwalPay.Ecr
             EcrTransactionType.Refund => "REFUND",
             EcrTransactionType.Inquiry => "INQUIRY",
             EcrTransactionType.Receipt => "RECEIPT",
+            EcrTransactionType.CloseReceipt => "CLOSE_RECEIPT",
             _ => throw new ArgumentOutOfRangeException(nameof(type)),
         };
 
@@ -81,6 +90,7 @@ namespace AmwalPay.Ecr
             EcrTransactionType.Refund => "Refund",
             EcrTransactionType.Inquiry => "Inquiry",
             EcrTransactionType.Receipt => "Receipt",
+            EcrTransactionType.CloseReceipt => "Close receipt",
             _ => throw new ArgumentOutOfRangeException(nameof(type)),
         };
 
@@ -96,7 +106,10 @@ namespace AmwalPay.Ecr
         /// number (STAN). The terminal looks the original up by STAN and terminal.
         /// </summary>
         public static bool RequiresOriginalStan(this EcrTransactionType type) =>
-            type != EcrTransactionType.Sale;
+            type == EcrTransactionType.Void
+            || type == EcrTransactionType.Refund
+            || type == EcrTransactionType.Inquiry
+            || type == EcrTransactionType.Receipt;
 
         /// <summary>
         /// Whether the caller supplies the date of the original transaction. A

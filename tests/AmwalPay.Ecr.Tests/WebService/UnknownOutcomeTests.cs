@@ -38,9 +38,9 @@ namespace AmwalPay.Ecr.Tests.WebService
         {
             var result = await Terminal(Throw).SaleAsync(1.000m);
 
-            var declined = Assert.IsType<EcrResult.Declined>(result);
-            Assert.Equal("NO_RESPONSE", declined.ResponseCode);
-            Assert.Equal(NextStep.InquireByMerchantReference, declined.NextStep);
+            var failed = Assert.IsType<EcrResult.Failed>(result);
+            Assert.IsType<Failure.Timeout>(failed.Failure);
+            Assert.Equal(NextStep.InquireByMerchantReference, failed.NextStep);
         }
 
         [Fact]
@@ -48,7 +48,8 @@ namespace AmwalPay.Ecr.Tests.WebService
         {
             var result = await Terminal(() => Reply(HttpStatusCode.OK, "")).SaleAsync(1.000m);
 
-            Assert.Equal(NextStep.InquireByMerchantReference, Assert.IsType<EcrResult.Declined>(result).NextStep);
+            var failed = Assert.IsType<EcrResult.Failed>(result);
+            Assert.Equal(NextStep.InquireByMerchantReference, failed.NextStep);
         }
 
         [Fact]

@@ -6,31 +6,27 @@ Symptom first, then the cause and what to do about it.
 
 ## How the SDK reports a lost answer
 
-Read this table first; most symptoms below are one of its rows. It is exact for
-LAN / USB (`EcrTerminal`).
+Read this table first; most symptoms below are one of its rows.
 
-| Situation | What you get | Outcome | Auto-inquiry runs? |
+| Situation | You get | Outcome | Auto-inquiry runs? |
 |---|---|---|---|
-| Connection refused, no route, host unknown | `Failed` / `Failure.Unreachable` | Nothing was sent | No |
-| **Connect** timed out (`ConnectTimeout`, 10 s) | `Failed` / `Failure.Unreachable` (`Connection timed out after 10000 ms`) | Nothing was sent | No |
-| Request written, no **answer** within `ResponseTimeout` (120 s) | `Failed` / `Failure.Timeout` | **Unknown** | Yes |
-| Reset or abort after the request was written; closed part way through the answer | `Failed` / `Failure.ConnectionLost` | **Unknown** | Yes |
-| An answer that is empty or not JSON | `Failed` / `Failure.Malformed` | **Unknown** | Yes |
-| An answer that is unsigned, wrongly signed, or echoes another request's nonce | `Failed` / `Failure.Unauthenticated` | **Unknown** | Yes |
-| Your `CancellationToken` was cancelled | `OperationCanceledException` — no result | **Unknown** | No |
-| The terminal refused (`96`, `25`, `51`, …) | `Declined` | No money moved (except `91`, `94` — inquire) | — |
+| **LAN / USB:** connection refused, no route, host unknown | `Failed` / `Failure.Unreachable` | Nothing was sent | No |
+| **LAN / USB:** **connect** timed out (`ConnectTimeout`, 10 s) | `Failed` / `Failure.Unreachable` (`Connection timed out after 10000 ms`) | Nothing was sent | No |
+| **LAN / USB:** request written, no **answer** within `ResponseTimeout` (120 s) | `Failed` / `Failure.Timeout` | **Unknown** | Yes |
+| **LAN / USB:** reset or abort after the request was written; closed part-way through the answer | `Failed` / `Failure.ConnectionLost` | **Unknown** | Yes |
+| **LAN / USB:** an answer that is empty or not JSON | `Failed` / `Failure.Malformed` | **Unknown** | Yes |
+| **LAN / USB:** an answer that is unsigned, wrongly signed, or echoes another request's nonce | `Failed` / `Failure.Unauthenticated` | **Unknown** | Yes |
+| **Web Service:** timeout (130 s), no network, reset | `Failed` / `Failure.Timeout` (`NO_RESPONSE`) | **Unknown** | Never; inquire yourself |
+| **Web Service:** HTTP 5xx, empty or non-JSON reply | `Failed` / `Failure.ConnectionLost` | **Unknown** | Never; inquire yourself |
+| **Web Service:** non-numeric `MerchantId` / `TerminalId` | `Failed` / `Failure.Malformed`, empty reference | Nothing was sent | No |
+| Your `CancellationToken` was cancelled | `OperationCanceledException`; no result | **Unknown** | No |
+| The terminal or Hub refused (`96`, `25`, `51`, ...) | `Declined` | No money moved (except `91`, `94`: inquire) | n/a |
 
 "Auto-inquiry" is `EcrConfig.AutoInquireOnFailure` (default `true`): one
 `InquireByReferenceAsync` on a fresh connection, attached as `Failed.Recovered`. It
-never runs when nothing was sent, and it is never used to resend a sale.
-
-**Web Service (`EcrWebServiceTerminal`) is different.** A transport error —
-timeout, no network, reset, empty or non-JSON reply, HTTP 5xx — arrives as
-`EcrResult.Declined` with `NextStep == NextStep.InquireByMerchantReference` (the
-`ResponseCode` is usually `NO_RESPONSE`, or the HTTP status such as `502`), and as
-`EcrInquiry.Failed` / `Failure.ConnectionLost` on an inquiry. There is no
-`EcrResult.Failed`, no auto-inquiry. **That is an unknown outcome, not a refusal.**
-See [Web Service ECR](#web-service-ecr).
+exists on `EcrTerminal` only, never runs when nothing was sent, and is never used to
+resend a sale. On Web Service a failed inquiry arrives as `EcrInquiry.Failed` /
+`Failure.ConnectionLost`. See [Web Service ECR](#web-service-ecr).
 
 ---
 
@@ -223,9 +219,8 @@ Check `w32tm /query /status` and the time-zone setting.
 
 ## Web Service ECR
 
-Setup checklist (prerequisites → `Plan` → `IsReady` → `WebServiceTerminal` /
-`Open` → first call):
-[initialization process](integration-guide.md#initialization-process).
+Setup checklist (prerequisites, `Plan`, `IsReady`, `WebServiceTerminal` / `Open`,
+first call): [Web Service in the integration guide](integration-guide.md#web-service).
 
 ### Every Hub call fails authentication
 
@@ -248,34 +243,41 @@ diagnostics show the formula and whether a key is configured (`configured` /
 Web Service ECR needs numeric backend IDs on [EcrLink.WebService](api-reference.md#ecrlink)
 or [EcrConfig](api-reference.md#ecrconfig). The client returns
 `EcrResult.Failed` (`Failure.Malformed`, empty `MerchantReference`) and sends
-nothing when they are missing or not numbers. Use [EcrSessions.Plan](api-reference.md#ecrsessions)
+nothing when they are missing or not numbers (`EcrInquiry.Failed` and
+`EcrReceiptClosed.Failed` for those calls). Use [EcrSessions.Plan](api-reference.md#ecrsessions)
 to validate before sending — missing IDs appear in `plan.Issues`.
 
-### A sale came back `Declined` with `NextStep == InquireByMerchantReference`
+### A Web Service sale came back `Failed` / `Timeout` or `ConnectionLost`
 
-**Not a refusal.** The HTTP call did not complete — timeout, no network, connection
-reset (`ResponseCode == "NO_RESPONSE"`), or the Hub answered with an empty body, an
-unreadable body or an HTTP 5xx with no message (`ResponseCode` is the status, e.g.
-`502`) — and the HTTP layer synthesised a `success:false` envelope, which the SDK
-reads as a decline but marks with `nextStep: INQUIRE_BY_MERCHANT_REFERENCE`. The Hub
-may have processed the sale. **Do not resend it.** `Declined.NextStep` is the
-reliable signal; `NO_RESPONSE` is only the commonest cause. Call
-`InquireByReferenceAsync` with the sale's `merchantReference` (date may be blank),
-or `InquireAsync(receiptNumber, transactionDate)` if you already have the STAN
-from the terminal's screen, receipt, or Hub back office. Reconcile against the
-batch if the lookup still leaves the outcome unknown. `result.Raw` for a
-synthesised answer is just
-`{"success":false,"responseCode":"NO_RESPONSE","message":"…","nextStep":"INQUIRE_BY_MERCHANT_REFERENCE"}`.
-A `Declined` with `NextStep.None` — a real Hub refusal, or an HTTP 4xx with no
-readable message — is final.
+**Not a refusal.** The HTTP call did not complete: a timeout, no network, a connection
+reset (`Failure.Timeout`; the synthesised answer's `responseCode` is `NO_RESPONSE`),
+or the Hub replied with an empty body, an unreadable body or an HTTP 5xx with no
+message (`Failure.ConnectionLost`). The Hub may have processed the sale. **Do not
+resend it.** Call `InquireByReferenceAsync` with the sale's `merchantReference`
+(`transactionDate: ""` is fine), or `InquireAsync(receiptNumber, transactionDate)` if
+you already have the receipt number from the terminal's screen, receipt or the Hub
+back office. Reconcile against the batch if the lookup still leaves the outcome
+unknown. `Failed.Recovered` is always `null` on Web Service.
+
+A `Declined` is a real Hub answer and is final, including an HTTP 4xx with no
+readable message (its `ResponseCode` is the status). Treat `91` and `94` as
+"inquire", as on LAN.
 
 ### An inquiry on Web Service returned `Failed` / `ConnectionLost`
 
 The inquiry's own request hit a transport failure (timeout, no network, empty or
-unreadable reply, 5xx), so the lookup did not happen. That is not "not found" and
-not a finding — it is still unknown. Ask again with the same
-`InquireAsync` / `InquireByReferenceAsync` call. `EcrInquiry.NotFound` is a
-genuine "no such transaction" answer from the Hub.
+unreadable reply, 5xx), so the lookup did not happen. That is not "not found" and not
+a finding: it is still unknown. Ask again. `EcrInquiry.NotFound` is a genuine "no such
+transaction" answer from the Hub (an HTTP 4xx with no readable message also reads as
+`NotFound`).
+
+### Close receipt on Web Service returned `Refused` with `NO_RESPONSE`
+
+`CloseReceiptAsync` (1.0.2) has no unknown-outcome type; a transport error arrives as
+`EcrReceiptClosed.Refused` with `ResponseCode == "NO_RESPONSE"`. It is harmless: the
+terminal simply stays on its receipt screen and you can ask again.
+`EcrReceiptClosed.Failed` with `Failure.Malformed` on Web Service means the original
+merchant reference was blank or the IDs are not numeric; nothing was sent.
 
 ### Web Service ECR on .NET Framework: TLS 1.2
 
@@ -283,9 +285,9 @@ The Hub requires **TLS 1.2**. An app that **targets** a .NET Framework version e
 than 4.7 (4.6.2 is the declared floor and is affected; it is the app's target that
 counts, not this package's) — including older WPF/WinForms tills — may negotiate only
 older protocols by default, and every
-call fails as `NO_RESPONSE`. The `Reason` is the generic `An error occurred while
-sending the request.`: the underlying "could not create SSL/TLS secure channel"
-error is one level down and is not surfaced by the SDK. Enable TLS 1.2 once, at
+call fails as `Failed` / `Failure.Timeout`. The message is the generic `An error
+occurred while sending the request.`: the underlying "could not create SSL/TLS
+secure channel" error is one level down and is not surfaced by the SDK. Enable TLS 1.2 once, at
 start-up, before the first Web Service call:
 
 ```csharp
@@ -307,7 +309,7 @@ The Web Service client uses the process's default proxy settings and shares one
 `HttpClient`; there is no SDK setting for a proxy. On .NET Framework, configure
 `<system.net><defaultProxy>` in `app.config`; on .NET 5+, the system proxy is used,
 or set `HttpClient.DefaultProxy` before the first Web Service call. A proxy that
-requires credentials or intercepts TLS shows up as `NO_RESPONSE` or an HTTP `407`.
+requires credentials or intercepts TLS shows up as `Failure.Timeout` or an HTTP `407`.
 
 ---
 
@@ -317,15 +319,8 @@ requires credentials or intercepts TLS shows up as `NO_RESPONSE` or an HTTP `407
 
 Use `InquireByReferenceAsync()` (or set `OriginalMerchantReference` on the
 transaction-status request with an empty `stan`). The SDK sends
-`originalMerchantReference` and leaves `stan` empty. For lookup by receipt
-number, keep using `InquireAsync(receiptNumber, transactionDate)`.
-
-### Auto-recovery after timeout is LAN-only
-
-`EcrConfig.AutoInquireOnFailure` triggers `InquireByReferenceAsync()` on
-[EcrTerminal](api-reference.md#ecrterminal) only. On Web Service, resolve unknown
-outcomes yourself with `InquireByReferenceAsync` (preferred after a lost sale) or
-`InquireAsync` when you have the STAN.
+`originalMerchantReference` and leaves `stan` empty. For lookup by receipt number use
+`InquireAsync(receiptNumber, transactionDate)`.
 
 ### LAN works but Web Service hash is rejected (or the reverse)
 
@@ -340,7 +335,7 @@ from the terminal at all. Check, in order: the key is the **Wi‑Fi/LAN** one (n
 Web Service one); it is the key issued for *this* terminal; the terminal actually has
 a key (a terminal with no key answers unsigned, which a till with a key rejects).
 
-Against the [fake terminal](#testing-against-the-fake-server-everything-is-approved)
+Against the [fake server](#testing-against-the-fake-server-everything-is-approved)
 this is expected: it does not sign, so any configured key fails.
 
 ### `63` from the terminal
@@ -393,13 +388,14 @@ Three things to check:
 Your read timed out. Before you shorten the timeout, check what you are actually
 waiting for: a sale waits for the **cardholder**, and ninety seconds is not
 unusual when someone is finding their card and entering a PIN. The SDK's default
-`ResponseTimeout` is 120 seconds for that reason.
+`ResponseTimeout` is 120 seconds for that reason (130 s on Web Service, applied by
+`EcrSessions.Plan`).
 
 If you shorten it, you are choosing to abandon transactions that would have
 succeeded — and you still have to resolve the unknown outcome.
 
-After a `Timeout`, expect the call to take up to a second `ResponseTimeout` longer:
-the auto-inquiry is a second request. Set `AutoInquireOnFailure = false` only if
+After a LAN `Timeout`, expect the call to take up to a second `ResponseTimeout`
+longer: the auto-inquiry is a second request. Set `AutoInquireOnFailure = false` only if
 your till runs its own reconciliation.
 
 ---
@@ -440,12 +436,12 @@ building the display from the request rather than the result.
 Almost always one of three things:
 
 **You booked a `Failed` as a decline.** `Timeout` and `ConnectionLost` mean the
-outcome is *unknown*, not refused. The terminal may have completed the payment
-and been unable to say so.
+outcome is *unknown*, not refused. The terminal may have completed the payment and
+been unable to say so.
 
-**You booked a Web Service `Declined` with `NextStep == InquireByMerchantReference`
-(usually `NO_RESPONSE`) as a decline.** That `Declined` is a network error in
-disguise — see [Web Service ECR](#web-service-ecr).
+**You booked a Web Service `Failed` as a decline.** A `Timeout` or `ConnectionLost`
+on Web Service is a network error with an unknown outcome; see
+[Web Service ECR](#web-service-ecr).
 
 **You decided from `ResponseCode`.** Use the result type. A partial approval that was
 then voided carries the bank's own `00`; a client matching on the code books a
@@ -547,7 +543,7 @@ containing `closed the connection` becomes `ConnectionLost` (outcome unknown,
 auto-inquiry runs). Any other `IOException` becomes `Unreachable` — "nothing was
 sent" — so a channel that lets a raw I/O error escape after the write is telling the
 till a payment did not happen. Wrap it, as in the
-[skeleton](integration-guide.md#usb-cable-ecr--bring-your-own-channel).
+[skeleton](integration-guide.md#usb-cable-bring-your-own-channel).
 
 ### `InvalidOperationException: USB cable sessions require a channel factory`
 
@@ -658,18 +654,15 @@ from the DLL that landed in your output folder if it differs.
 ### My app targets 4.6.2 and support ends Jan 12, 2027
 
 .NET Framework 4.6.2 is the declared floor, so the SDK supports it today. Microsoft
-ends support for 4.6.2 on **Jan 12, 2027**; after that the floor rises to 4.7.2
-unless the owners decide otherwise. Nothing in the package changes on that day and
-there is no `net462` asset to lose: your app already uses the `netstandard2.0` build, which
-4.7.2 uses too. What changes is that 4.6.2 stops being covered by our support
-statement. Retarget to **4.7.2 or 4.8** (4.7.2 onward has no end date) before then;
-it also removes the need for the TLS 1.2 line. The dated list is in the
-[Support calendar](compatibility.md#support-calendar). The same applies to .NET 8 and
-.NET 9 (Microsoft ends both on **Nov 10, 2026**; move to .NET 10).
+ends support on **Jan 12, 2027**, after which the floor rises to 4.7.2 unless the
+owners decide otherwise. Nothing in the package changes on that day; your app already
+uses the `netstandard2.0` asset, which 4.7.2 uses too. Retarget to 4.7.2 or 4.8 before
+then (it also removes the need for the TLS 1.2 line). .NET 8 and 9 end on **Nov 10,
+2026**; move to .NET 10. Dates: [Support calendar](compatibility.md#support-calendar).
 
 ### Web Service calls fail on .NET Framework before 4.7
 
-Every call comes back as `NO_RESPONSE`. That is TLS 1.2 not being enabled for an app
+Every call comes back as `Failed` / `Failure.Timeout`. That is TLS 1.2 not being enabled for an app
 that targets a version before 4.7 (4.6.2 included); see
 [Web Service ECR on .NET Framework: TLS 1.2](#web-service-ecr-on-net-framework-tls-12).
 
@@ -733,8 +726,8 @@ py tools\fake_pos_server.py --port 9100 --not-found
 ```
 
 It does not sign anything, so a terminal built with a `SecureHashKey` gets
-`Failure.Unauthenticated` from it. Build the test terminal with no key — see the
-[signing caveat](integration-guide.md#the-signing-caveat).
+`Failure.Unauthenticated` from it. Build the test terminal with no key; see
+[Testing without hardware](integration-guide.md#12-testing-without-hardware).
 
 ### Sending a request by hand
 

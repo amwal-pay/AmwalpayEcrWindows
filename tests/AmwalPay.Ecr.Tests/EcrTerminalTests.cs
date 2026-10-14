@@ -268,9 +268,12 @@ namespace AmwalPay.Ecr.Tests
                 "TW1",
                 Unsigned);
 
-            var declined = Assert.IsType<EcrResult.Declined>(await terminal.SaleAsync(1m));
+            // nextStep INQUIRE is not a decline — money may have moved — so it
+            // surfaces as Failed and tells the till to inquire by reference.
+            var failed = Assert.IsType<EcrResult.Failed>(await terminal.SaleAsync(1m));
 
-            Assert.Equal(NextStep.InquireByMerchantReference, declined.NextStep);
+            Assert.IsType<Failure.ConnectionLost>(failed.Failure);
+            Assert.Equal(NextStep.InquireByMerchantReference, failed.NextStep);
         }
 
         [Theory]

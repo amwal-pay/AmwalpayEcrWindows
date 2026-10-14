@@ -18,5 +18,7 @@ namespace AmwalPay.Ecr.WebService
         Task<EcrWireResponse> RefundAsync(EcrWebServiceRefundRequest request, CancellationToken cancellationToken = default);
 
         Task<EcrWireResponse> TransactionStatusAsync(EcrWebServiceTransactionStatusRequest request, CancellationToken cancellationToken = default);
+
+        Task<EcrWireResponse> CloseReceiptAsync(EcrWebServiceCloseReceiptRequest request, CancellationToken cancellationToken = default);
     }
 }

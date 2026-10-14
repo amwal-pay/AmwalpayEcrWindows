@@ -243,7 +243,17 @@ namespace AmwalPay.Ecr
                     // config's own valid port rather than fail to build the plan.
                     return lan.Port >= 1 && lan.Port <= 65535 ? config with { Port = lan.Port } : config;
                 case EcrLink.WebService web:
-                    return config with { MerchantId = web.MerchantId, TerminalId = web.TerminalId };
+                    // Web Service HTTP read timeout — 130s unless the caller already
+                    // overrode the LAN default (120s).
+                    var responseTimeout = config.ResponseTimeout == TimeSpan.FromSeconds(120)
+                        ? EcrConfig.WebServiceResponseTimeout
+                        : config.ResponseTimeout;
+                    return config with
+                    {
+                        MerchantId = web.MerchantId,
+                        TerminalId = web.TerminalId,
+                        ResponseTimeout = responseTimeout,
+                    };
                 default:
                     // Nothing to merge — a cable is not addressed, so the port in
                     // the config stays whatever it was and is simply never read.

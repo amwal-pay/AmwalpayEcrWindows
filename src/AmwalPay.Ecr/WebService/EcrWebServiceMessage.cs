@@ -32,6 +32,19 @@ namespace AmwalPay.Ecr.WebService
             string merchantReference = "",
             string transactionDateTime = "")
         {
+            if (type == EcrTransactionType.CloseReceipt)
+            {
+                return BuildCloseReceipt(
+                    merchantId: merchantId,
+                    terminalId: terminalId,
+                    terminalSerial: terminalSerial,
+                    secureHashKey: secureHashKey,
+                    ecrId: ecrId,
+                    merchantReference: merchantReference,
+                    originalMerchantReference: originalMerchantReference,
+                    transactionDateTime: transactionDateTime);
+            }
+
             var reference = EcrMessage.ResolveMerchantReference(merchantReference);
             var wireDateTime = transactionDateTime.Length != 0 ? transactionDateTime : Timestamp();
             var body = new JsonObject
@@ -86,6 +99,47 @@ namespace AmwalPay.Ecr.WebService
                 default:
                     throw new InvalidOperationException($"{type} is not a Web Service operation");
             }
+
+            var json = secureHashKey.Length == 0 ? body : WebServiceSecureHash.WithHash(body, secureHashKey);
+            return (reference, json);
+        }
+
+        /// <summary>
+        /// Hub <c>/Ecr/closeReceipt</c> body — no <c>messageType</c> / <c>currencyCode</c>.
+        /// <paramref name="originalMerchantReference"/> is the sale / void / refund that
+        /// just finished; <paramref name="merchantReference"/> is this close request's own id.
+        /// </summary>
+        public static (string Reference, JsonObject Json) BuildCloseReceipt(
+            long merchantId,
+            long terminalId,
+            string terminalSerial,
+            string secureHashKey,
+            string ecrId = "ECR01",
+            string merchantReference = "",
+            string originalMerchantReference = "",
+            string transactionDateTime = "")
+        {
+            if (string.IsNullOrWhiteSpace(originalMerchantReference))
+            {
+                throw new ArgumentException(
+                    "Close receipt needs the original merchant reference",
+                    nameof(originalMerchantReference));
+            }
+
+            var reference = EcrMessage.ResolveMerchantReference(merchantReference);
+            var wireDateTime = transactionDateTime.Length != 0 ? transactionDateTime : Timestamp();
+            var body = new JsonObject
+            {
+                ["version"] = EcrMessage.ProtocolVersion,
+                ["merchantId"] = merchantId,
+                ["terminalId"] = terminalId,
+                ["terminalSerial"] = terminalSerial,
+                ["ecrId"] = ecrId,
+                ["merchantReference"] = reference,
+                ["transactionDateTime"] = wireDateTime,
+                ["requestDateTime"] = wireDateTime,
+                ["originalMerchantReference"] = EcrMessage.ResolveMerchantReference(originalMerchantReference),
+            };
 
             var json = secureHashKey.Length == 0 ? body : WebServiceSecureHash.WithHash(body, secureHashKey);
             return (reference, json);

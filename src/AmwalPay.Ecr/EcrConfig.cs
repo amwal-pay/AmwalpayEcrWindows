@@ -21,6 +21,13 @@ namespace AmwalPay.Ecr
         /// <summary>The port Amwal POS terminals listen on for ECR requests.</summary>
         public const int DefaultPort = 9100;
 
+        /// <summary>
+        /// HTTP read timeout for Web Service REST calls (<c>/Ecr/Sale</c>, void,
+        /// refund, inquiry). Longer than the LAN default: the Hub wait includes
+        /// card present + PIN, and 120s was cutting sales off early.
+        /// </summary>
+        public static readonly TimeSpan WebServiceResponseTimeout = TimeSpan.FromSeconds(130);
+
         /// <summary>64 bits is the shortest key worth calling a secret.</summary>
         private const int MinSecretLength = 16;
 

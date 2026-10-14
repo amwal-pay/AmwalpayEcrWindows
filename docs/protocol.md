@@ -6,13 +6,11 @@ platform this package does not cover (iOS, Flutter, an embedded till), writing t
 USB channel the package leaves to you, debugging on the wire, or writing a
 terminal-side implementation.
 
-If you are using the C# SDK (`AmwalPay.Ecr`), you do not need most of this for
-day-to-day integration — see the [integration guide](integration-guide.md).
-**Sections 3–8** describe **LAN / Wi‑Fi TCP** (`ecrMode` 1 or 2). **Section 9**
-describes **Web Service REST** (`ecrMode` 4).
+If you are using the C# SDK (`AmwalPay.Ecr`) you do not need most of this; see the
+[integration guide](integration-guide.md). Sections 3-8 describe **LAN / Wi-Fi TCP**
+(`ecrMode` 1 or 2). Section 9 describes **Web Service REST** (`ecrMode` 4).
 
-**Reference implementation.** The C# sources are the reference for everything
-below:
+The C# sources are the reference for everything below:
 
 | Concern                              | Source                                                                                                                                                                   |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -81,7 +79,7 @@ On `ecrMode` 1 (USB cable) no port is opened either. The terminal waits on the
 cable as a USB accessory, and the till reaches it as the USB host. A till still
 pointed at an IP for that mode reaches nothing. The C# package ships no USB
 channel; write one for your hardware and frame with `EcrFrames` (see the
-[integration guide](integration-guide.md#usb-cable-ecr--bring-your-own-channel)).
+[integration guide](integration-guide.md#usb-cable-bring-your-own-channel)).
 
 Everything above the transport is identical either way: the same framing, the
 same signing, the same messages and the same response codes. Only how the bytes
@@ -118,7 +116,7 @@ meaning the operation uses it.
 | Field                       | Always                         | Description                                                                                                                                 |
 | --------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | `version`                   | ✔                              | Protocol version. `1` today. Bumped only for a change older terminals cannot read                                                           |
-| `messageType`               | ✔                              | `SALE`, `VOID`, `REFUND`, `INQUIRY`, `RECEIPT`                                                                                              |
+| `messageType`               | ✔                              | `SALE`, `VOID`, `REFUND`, `INQUIRY`, `RECEIPT`, `CLOSE_RECEIPT`                                                                              |
 | `merchantReference`         | ✔                              | The till's own reference for this request, echoed in the response. See [Merchant reference](#merchant-reference)                            |
 | `terminalSerial`            | ✔                              | The terminal being addressed, as registered on the till                                                                                     |
 | `currencyCode`              | ✔                              | ISO 4217 numeric. `512` is OMR                                                                                                              |
@@ -661,6 +659,31 @@ terminal is busy.
 An empty or absent `receiptUrl` means no receipt, whatever the response code
 says. A receipt with no URL is not a receipt.
 
+### 5.6 Close receipt
+
+Asks the terminal to put its receipt away and return to its idle screen. Not
+financial, safe to repeat, and answered whether or not a receipt was up. Send it
+from the till's explicit Close receipt action, not when a dialog is merely
+dismissed. Needs SDK 1.0.2 (`CloseReceiptAsync`).
+
+**Request**: the common envelope only, with `"messageType": "CLOSE_RECEIPT"`. No
+`amount`, `stan` or `originalTransactionDate`.
+
+```json
+{
+  "version": 1,
+  "messageType": "CLOSE_RECEIPT",
+  "merchantReference": "F6A1B2C3D4E5",
+  "terminalSerial": "P653200085189",
+  "currencyCode": "512",
+  "transactionDateTime": "20260809173800",
+  "ecrId": "ECR01"
+}
+```
+
+**Response**: read `success` (or `approved`) only. `true` means the terminal is idle.
+`false` means it refused (typically `12` on firmware that predates the message type). Treat a refusal as "cannot be asked" and carry on.
+
 ---
 
 ## 6. Response codes
@@ -747,7 +770,7 @@ To test without hardware, the stand-in listener in this repository
 ([`tools/fake_pos_server.py`](../tools/fake_pos_server.py)) speaks the LAN
 protocol. It does **not** sign its answers, so a client with a key configured will
 (correctly) reject them — see the
-[integration guide](integration-guide.md#the-signing-caveat):
+[integration guide](integration-guide.md#12-testing-without-hardware):
 
 ```powershell
 py tools\fake_pos_server.py --port 9100
@@ -760,20 +783,20 @@ py tools\fake_pos_server.py --port 9100
 When TMS sets `ecrMode: 4`, the till does not open TCP to the terminal. It posts
 JSON to the Amwal Hub over HTTPS. The C# SDK resolves the Hub base URL from
 `EcrEnvironment` (SIT / UAT / PROD). **Hostnames and ports are SDK-internal and
-are not listed in documentation** — integrators only set the environment enum.
-Path suffixes are fixed:
+are not published**; integrators only set the environment enum. Path suffixes are
+fixed:
 
-| Operation                    | Path           |
-| ---------------------------- | -------------- |
-| Sale                         | `/Ecr/Sale`    |
-| Void                         | `/Ecr/Void`    |
-| Refund                       | `/Ecr/Refund`  |
-| Transaction status (inquiry) | `/Ecr/Inquiry` |
+| Operation                    | Path               |
+| ---------------------------- | ------------------ |
+| Sale                         | `/Ecr/Sale`        |
+| Void                         | `/Ecr/Void`        |
+| Refund                       | `/Ecr/Refund`      |
+| Transaction status (inquiry) | `/Ecr/Inquiry`     |
+| Close receipt                | `/Ecr/closeReceipt` |
 
 Each request is a JSON object matching the Hub contract for that path, plus
 `messageType` / `originalTerminalId` for Hub correlation (see
-[`WebService/EcrWebServiceMessage.cs`](../src/AmwalPay.Ecr/WebService/EcrWebServiceMessage.cs)
-and `WebServiceSecureHashTests`):
+[`WebService/EcrWebServiceMessage.cs`](../src/AmwalPay.Ecr/WebService/EcrWebServiceMessage.cs)):
 
 | Field                       | Sale                                      | Void                      | Refund                    | Inquiry                        |
 | --------------------------- | ----------------------------------------- | ------------------------- | ------------------------- | ------------------------------ |
@@ -794,11 +817,27 @@ and `WebServiceSecureHashTests`):
 | `originalTerminalId`        |                                           | ✔ (= `terminalId`)        | ✔ (= `terminalId`)        | ✔ (= `terminalId`)             |
 | `secureHashValue`           | when keyed                                | when keyed                | when keyed                | when keyed                     |
 
-**Not sent by the SDK on Web Service today** (but used on LAN TCP):
+Not sent on Web Service (but used on LAN TCP): `nonce`. There is no Web Service
+`RECEIPT` operation in this SDK.
 
-- `nonce`, `systemTraceNr`
+### Close receipt (`/Ecr/closeReceipt`)
 
-There is no Web Service `RECEIPT` operation in this SDK version.
+Post from the till's explicit Close receipt action (the same action as LAN
+`CLOSE_RECEIPT`), not automatically after a sale / void / refund. The body has **no
+`messageType` and no `currencyCode`**; it names the money operation that just
+finished in `originalMerchantReference`, and is signed exactly like every other Hub
+call. Needs SDK 1.0.2.
+
+| Field | Value |
+|---|---|
+| `version` | `1` |
+| `merchantId`, `terminalId`, `terminalSerial`, `ecrId` | As on the other operations |
+| `merchantReference` | This close request's own id (generated when blank) |
+| `originalMerchantReference` | **Required.** The sale / void / refund's `merchantReference` |
+| `transactionDateTime`, `requestDateTime` | `yyyyMMddHHmmss`, equal |
+| `secureHashValue` | When keyed |
+
+The answer is a Hub envelope; only `success` is read.
 
 ### Transport errors on Web Service
 
@@ -810,24 +849,32 @@ synthesises a Hub-shaped envelope and reads it like any other answer:
 {
   "success": false,
   "responseCode": "NO_RESPONSE",
-  "message": "Timed out after 2m 10s",
+  "message": "Timed out after 2m 20s",
   "nextStep": "INQUIRE_BY_MERCHANT_REFERENCE"
 }
 ```
 
-`responseCode` is `NO_RESPONSE` for a timeout, no network or a broken connection,
-and the HTTP status (`"502"`, …) for an empty or unreadable reply. Whenever the
-request may have reached the Hub — no response, an empty body, a non-JSON body, or
-an HTTP 5xx with no readable message — the envelope carries `nextStep:
-INQUIRE_BY_MERCHANT_REFERENCE`. An HTTP 4xx with no readable message is synthesised
-the same way **without** `nextStep`. Because `success` is `false`, the SDK returns
-the envelope as a decline (`EcrResult.Declined`, with `NextStep` read from
-`nextStep`); for a transaction-status request that carries `nextStep` and no `data`
-it returns a failed lookup (`EcrInquiry.Failed`, `Failure.ConnectionLost`) rather
-than _not found_. **A synthesised envelope with `nextStep` is an unknown outcome,
-not a refusal.** A client implementing this protocol should key on `nextStep`, and
-treat `NO_RESPONSE` as the common instance: "ask before retrying". The whole request
-has one deadline of `ConnectTimeout + ResponseTimeout` (130 seconds by default).
+`responseCode` is `NO_RESPONSE` for a timeout, no network or a broken connection, and
+the HTTP status (`"502"`, ...) for an empty or unreadable reply. When the request may
+have reached the Hub (no response, an empty body, a non-JSON body, or an HTTP 5xx
+with no readable message) the envelope carries
+`nextStep: INQUIRE_BY_MERCHANT_REFERENCE`. An HTTP 4xx with no readable message is
+synthesised the same way **without** `nextStep`.
+
+The C# SDK reads an answer with `nextStep: INQUIRE_BY_MERCHANT_REFERENCE` as an
+unknown outcome and returns `EcrResult.Failed`: `Failure.Timeout` when
+`responseCode` is `NO_RESPONSE` or the message contains "timeout", otherwise
+`Failure.ConnectionLost`. For a transaction-status request carrying `nextStep` and no
+`data` it returns `EcrInquiry.Failed` (`ConnectionLost`) rather than _not found_. A
+close-receipt request has no unknown-outcome type; the same envelope reads as
+`EcrReceiptClosed.Refused`. **A synthesised envelope with `nextStep` is an unknown
+outcome, not a refusal.** A client implementing this protocol should key on
+`nextStep` and "ask before retrying".
+
+The whole request has one deadline of `ConnectTimeout + ResponseTimeout`. The SDK's
+`EcrSessions.Plan` raises a default 120 s `ResponseTimeout` to 130 s for Web Service
+(`EcrConfig.WebServiceResponseTimeout`), so the deadline is 140 s with defaults: the
+Hub's wait includes card presentation and PIN entry.
 
 ### Signing (Web Service)
 
@@ -863,7 +910,7 @@ responsibility. When a key is configured, the SDK refuses to send if the hash
 cannot be computed (fail-closed).
 
 Responses are JSON envelopes from the Hub (`success`, `responseCode`, `message`,
-`data`, …). The SDK maps them to the same [EcrResult](api-reference.md#ecrresult)
+`data`, ...). The SDK maps them to the same [EcrResult](api-reference.md#ecrresult)
 types as LAN ECR. It does not verify a response signature on this transport.
 
 ### What the integrator configures
@@ -875,4 +922,4 @@ types as LAN ECR. It does not verify a response signature on this transport.
 | `EcrEnvironment`            | App                              |
 | Hub hostname, port, paths   | SDK (internal)                   |
 
-See the [integration guide](integration-guide.md#4-web-service-ecr) for C# usage.
+See the [integration guide](integration-guide.md#web-service) for C# usage.

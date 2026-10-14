@@ -63,6 +63,34 @@ namespace AmwalPay.Ecr
             : EcrReceipt(MerchantReference);
     }
 
+    /// <summary>
+    /// The answer to a request to put the terminal's receipt away.
+    /// <para>
+    /// Success means the terminal is idle again — equally true whether it had a
+    /// receipt up or was already idle. Safe to repeat.
+    /// </para>
+    /// </summary>
+    public abstract record EcrReceiptClosed(string MerchantReference)
+    {
+        /// <summary>The terminal is on its idle screen.</summary>
+        public sealed record Idle(string MerchantReference, string Raw)
+            : EcrReceiptClosed(MerchantReference);
+
+        /// <summary>
+        /// The terminal answered and refused (e.g. firmware too old for
+        /// <c>CLOSE_RECEIPT</c>). Treat as "cannot be asked" and carry on.
+        /// </summary>
+        public sealed record Refused(
+            string MerchantReference,
+            string ResponseCode,
+            string Reason,
+            string Raw) : EcrReceiptClosed(MerchantReference);
+
+        /// <summary>The exchange itself failed. Safe to retry: nothing was changed.</summary>
+        public sealed record Failed(string MerchantReference, Failure Failure)
+            : EcrReceiptClosed(MerchantReference);
+    }
+
     /// <summary>A transaction as the terminal's backend records it.</summary>
     /// <param name="TransactionId">The backend's own identifier, unique across terminals and days.</param>
     /// <param name="Stan">The receipt number, unique only within a terminal's day.</param>

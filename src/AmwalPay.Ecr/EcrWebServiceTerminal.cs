@@ -158,6 +158,57 @@ namespace AmwalPay.Ecr
             return response.ToInquiry(reference, _config.MinorUnitDigits);
         }
 
+        /// <summary>
+        /// Posts <c>/Ecr/closeReceipt</c> for the sale / void / refund identified by
+        /// <paramref name="originalMerchantReference"/>.
+        /// <para>
+        /// Call when the cashier taps Close receipt — the same explicit action as
+        /// Wi‑Fi / USB LAN <c>CLOSE_RECEIPT</c>. Not invoked automatically by
+        /// <see cref="SaleAsync"/> / <see cref="VoidAsync"/> / <see cref="RefundAsync"/>.
+        /// </para>
+        /// </summary>
+        /// <param name="originalMerchantReference">The money-moving operation's reference.</param>
+        /// <param name="merchantReference">This close request's own id (blank → generated).</param>
+        public async Task<EcrReceiptClosed> CloseReceiptAsync(
+            string originalMerchantReference,
+            string merchantReference = "",
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(originalMerchantReference))
+            {
+                return new EcrReceiptClosed.Failed(
+                    merchantReference,
+                    new Failure.Malformed("Close receipt needs the original merchant reference"));
+            }
+
+            var ids = BackendIds();
+            if (ids == null)
+            {
+                return new EcrReceiptClosed.Failed(
+                    merchantReference,
+                    new Failure.Malformed("merchantId and terminalId are required for Web Service ECR"));
+            }
+
+            var built = EcrWebServiceMessage.BuildCloseReceipt(
+                merchantId: ids.Value.MerchantId,
+                terminalId: ids.Value.TerminalId,
+                terminalSerial: _terminalSerial,
+                secureHashKey: _config.SecureHashKey,
+                ecrId: _config.EcrId,
+                merchantReference: merchantReference,
+                originalMerchantReference: originalMerchantReference);
+            WebServiceHttpLog.Operation(
+                _logger,
+                EcrTransactionType.CloseReceipt.MessageType(),
+                built.Reference,
+                _terminalSerial,
+                ids.Value.MerchantId,
+                ids.Value.TerminalId);
+            var response = await _api.PostJsonAsync(
+                EcrWebServiceOperation.CloseReceipt, built.Json, cancellationToken).ConfigureAwait(false);
+            return response.ToReceiptClosed(built.Reference);
+        }
+
         private (string Reference, JsonObject Body) BuildRequest(
             EcrTransactionType type,
             (long MerchantId, long TerminalId) ids,

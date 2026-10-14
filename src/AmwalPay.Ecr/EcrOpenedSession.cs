@@ -122,6 +122,56 @@ namespace AmwalPay.Ecr
             return _local.ReceiptAsync(receiptNumber, transactionDate, originalTerminalId, cancellationToken: cancellationToken);
         }
 
+        /// <summary>
+        /// Asks the terminal to put its receipt away and go back to its idle screen.
+        /// <para>
+        /// On Wi‑Fi / USB this is a LAN <c>CLOSE_RECEIPT</c> message. On Web Service it
+        /// posts <c>/Ecr/closeReceipt</c> with <paramref name="originalMerchantReference"/>
+        /// naming the sale / void / refund that just finished. Call from the till’s
+        /// Close receipt action when the cashier is finished with the result — not as
+        /// a side effect of dismissing the dialog.
+        /// </para>
+        /// See <see cref="EcrTerminal.CloseReceiptAsync"/> and
+        /// <see cref="EcrWebServiceTerminal.CloseReceiptAsync"/>.
+        /// </summary>
+        /// <param name="merchantReference">This close request's own id (blank → generated).</param>
+        /// <param name="originalMerchantReference">
+        /// Required on Web Service — the money operation's merchant reference. Ignored on LAN.
+        /// </param>
+        public Task<EcrReceiptClosed> CloseReceiptAsync(
+            string merchantReference = "",
+            string originalMerchantReference = "",
+            CancellationToken cancellationToken = default)
+        {
+            if (_local != null)
+            {
+                return _local.CloseReceiptAsync(merchantReference, cancellationToken);
+            }
+
+            if (_web != null)
+            {
+                var original = string.IsNullOrWhiteSpace(originalMerchantReference)
+                    ? merchantReference
+                    : originalMerchantReference;
+                if (string.IsNullOrWhiteSpace(original))
+                {
+                    return Task.FromResult<EcrReceiptClosed>(new EcrReceiptClosed.Failed(
+                        merchantReference,
+                        new Failure.Malformed(
+                            "Web Service close receipt needs the original merchant reference")));
+                }
+
+                // When only one reference was passed, treat it as the original and
+                // let the SDK mint a fresh id for this close request.
+                var closeReference = string.IsNullOrWhiteSpace(originalMerchantReference)
+                    ? ""
+                    : merchantReference;
+                return _web.CloseReceiptAsync(original, closeReference, cancellationToken);
+            }
+
+            throw NoTransport();
+        }
+
         private static InvalidOperationException NoTransport() => new InvalidOperationException("Session has no transport");
     }
 }

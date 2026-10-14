@@ -55,6 +55,7 @@ namespace AmwalPay.Ecr.Tests
             Assert.True(plan.UsesWebService);
             Assert.Equal("13593", plan.Config.MerchantId);
             Assert.Equal("742001", plan.Config.TerminalId);
+            Assert.Equal(EcrConfig.WebServiceResponseTimeout, plan.Config.ResponseTimeout);
             Assert.Equal(WebServiceSecureHash.KeyLabel, plan.SigningKeyLabel);
             Assert.Contains("UAT", plan.ConnectionSummary);
         }
@@ -221,6 +222,18 @@ namespace AmwalPay.Ecr.Tests
             var unavailable = Assert.IsType<EcrReceipt.Unavailable>(receipt);
             Assert.Contains("only supported over", unavailable.Reason);
             Assert.Null(await session.ProbeReachabilityAsync());
+        }
+
+        [Fact]
+        public async Task AWebServiceSessionNeedsTheOriginalReferenceToCloseAReceipt()
+        {
+            var plan = EcrSessions.Plan(new EcrLink.WebService("13593", "742001"), WebConfig);
+            var session = EcrSessions.Open("SN1", plan);
+
+            var closed = await session.CloseReceiptAsync();
+
+            var failed = Assert.IsType<EcrReceiptClosed.Failed>(closed);
+            Assert.Contains("original merchant reference", failed.Failure.Message);
         }
 
         [Fact]

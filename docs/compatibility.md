@@ -1,24 +1,20 @@
 # Compatibility
 
-Which platforms `AmwalPay.Ecr` runs on, which of them we support, and exactly how
-much of each claim was checked. Written for developers choosing whether and how to
-adopt the package in a Windows native app (WinForms, WPF, console, Windows Service)
-or a web app (ASP.NET Core, classic ASP.NET).
+Which platforms `AmwalPay.Ecr` runs on, which of them are supported, and how much of
+each claim was checked.
 
-**The short answer.** Target **.NET Framework 4.6.2 or later** (**4.7.2 or later
-recommended**), or **.NET 8 or later**, and use **C# 9 or later**. Those are the
-supported minimums for both native and web apps. The package is plain managed code
-with no native or Windows-only dependency, so the same package serves a till on
+**The short answer.** Target **.NET Framework 4.6.2 or later** (4.7.2 or later
+recommended) or **.NET 8 or later**, with **C# 9 or later**. The package is managed
+code with no native or Windows-only dependency, so the same package serves a till on
 Windows and a service on any OS that runs .NET 8.
 
-Two dates to plan around, both Microsoft's, not ours. **.NET 8 and .NET 9 leave
-Microsoft support on Nov 10, 2026**, after which this SDK's supported minimum on
-modern .NET becomes .NET 10. **.NET Framework 4.6.2 leaves Microsoft support on Jan
-12, 2027**; after that the .NET Framework floor rises to 4.7.2 unless the owners
-decide otherwise. See the [Support calendar](#support-calendar).
+Two Microsoft dates to plan around: **.NET 8 and .NET 9 end on Nov 10, 2026** (the
+supported minimum on modern .NET then becomes .NET 10) and **.NET Framework 4.6.2 ends
+on Jan 12, 2027** (the floor then rises to 4.7.2 unless the owners decide otherwise).
+See the [Support calendar](#support-calendar).
 
 There is **no `net462` asset**. A 4.6.2 app gets the `netstandard2.0` build, which
-brings `System.Text.Json` and its dependency graph with it
+brings `System.Text.Json` and its dependency graph
 ([listed below](#what-is-in-the-package)).
 
 **Contents**
@@ -117,8 +113,8 @@ as `1/13/2027 6:59:59 AM`, the same cutoff the support policy pages give as Jan 
 ## What was verified, and what was not
 
 Everything in the first table was checked against the packed `AmwalPay.Ecr` 1.0.0
-`.nupkg` (not the source tree), on macOS. **macOS can compile, audit and run tests on
-CoreCLR; it cannot run .NET Framework.**
+`.nupkg` (not the source tree), on macOS; it is the baseline for later versions, which were not re-verified separately.
+**macOS can compile, audit and run tests on CoreCLR; it cannot run .NET Framework.**
 
 **Verified**
 
@@ -350,27 +346,18 @@ blocked web request holds a thread. **Async all the way is still the recommendat
 
 ## Windows native apps
 
-WinForms, WPF, console apps and Windows Services all use the same package:
-**.NET Framework 4.6.2 or later** (4.7.2 or later recommended) picks the
-`netstandard2.0` asset, **.NET 8 or later** picks `net8.0`. There is no
-Windows-specific requirement on the package itself: it is OS-neutral managed code.
-Only the WPF **sample** is Windows-only.
-
-Things your app takes on, not the package:
+WinForms, WPF, console apps and Windows Services all use the same package: .NET
+Framework 4.6.2 or later picks `netstandard2.0`, .NET 8 or later picks `net8.0`.
+There is no Windows-specific requirement on the package itself; only the WPF sample
+is Windows-only. Things your app takes on, not the package:
 
 - **Storing keys.** DPAPI (`ProtectedData`) is Windows-only and is the
-  [integration guide's](integration-guide.md#storing-keys-with-dpapi)
-  recommendation for tills. The SDK does not call it.
-- **Windows Firewall and network profile** for LAN ECR, covered in
+  [integration guide's](integration-guide.md#storing-keys-with-dpapi) recommendation.
+  The SDK does not call it.
+- **Windows Firewall and network profile** for LAN ECR:
   [troubleshooting](troubleshooting.md#windows-network-and-host).
-- **The support calendar.** A till on .NET Framework 4.6.2 or on .NET 8 is
-  supported today and has a Microsoft end date; see the
-  [Support calendar](#support-calendar).
-
-A working WPF sample on .NET 8 is in
-[`Windows-Native-Example`](https://github.com/amwal-pay/AmwalpayEcrWindowsExample/tree/main/Windows-Native-Example).
-It targets .NET 8, which Microsoft stops supporting on Nov 10, 2026; the sample
-should move to `net10.0`.
+- **The support calendar**: a till on .NET Framework 4.6.2 or .NET 8 is supported
+  today and has a Microsoft end date.
 
 ---
 
@@ -386,66 +373,18 @@ ASP.NET Core on .NET follows the .NET support policy; classic ASP.NET on .NET
 Framework follows the .NET Framework policy. Both are dated in the
 [Support calendar](#support-calendar).
 
-A working ASP.NET Core sample on .NET 8 is in
-[`AmwalECR-Web-Example`](https://github.com/amwal-pay/AmwalpayEcrWindowsExample/tree/main/AmwalECR-Web-Example).
-It targets .NET 8, which Microsoft stops supporting on Nov 10, 2026; the sample
-should move to `net10.0`.
+**Which mode fits a server.** LAN ECR opens a TCP connection from your server to the
+terminal's IP on port 9100, so the server must route to the terminal. A server in a
+data centre cannot reach a terminal on a shop's Wi-Fi; use Web Service ECR (HTTPS to
+the Hub) when the app is hosted away from the shop.
 
-**Which mode fits a server.** LAN ECR opens a TCP connection from your server to
-the terminal's IP on port 9100, so the server must be able to route to the terminal.
-A server in a data centre cannot reach a terminal on a shop's Wi-Fi. Use **Web
-Service ECR** (HTTPS to the Hub) when the app is hosted away from the shop, and LAN
-when the server sits on the same network.
-
-**Sharing and lifetime.** Both are safe to call concurrently and to hold as
-singletons, because neither keeps state between calls (from reading the source;
-not load-tested):
-
-- **LAN (`EcrTerminal`)** opens **one TCP connection per call** and keeps none
-  between calls.
-- **Web Service (`EcrWebServiceTerminal`)** uses **one process-wide static
-  `HttpClient`**, so creating one per request does not exhaust sockets either.
-- `EcrOpenedSession` (from `EcrSessions.Open`) wraps either; the same holds.
-
-So register one per physical terminal and keep no per-request state on it. The
-sample web app registers its transaction engine as a singleton and opens a session
-per transaction from stored terminal settings; both shapes are fine.
-
-```csharp
-// ASP.NET Core (.NET 8): register once at start-up.
-builder.Services.AddSingleton<EcrTerminal>(sp =>
-{
-    var section = sp.GetRequiredService<IConfiguration>().GetSection("Ecr");
-    var plan = EcrSessions.Plan(
-        link: new EcrLink.Lan(Host: section["TerminalHost"] ?? ""),
-        config: new EcrConfig { SecureHashKey = section["LanKey"] ?? "" });
-
-    if (!plan.IsReady)   // fail at start-up, not on the first customer
-        throw new InvalidOperationException("ECR is not configured: " + string.Join("; ", plan.Issues));
-
-    return EcrSessions.LanTerminal(
-        terminalSerial: section["TerminalSerial"] ?? "",
-        plan: plan);
-});
-```
-
-The signing key comes from your secret store (user secrets, a vault, environment
-variables), never from source or a committed `appsettings.json`. For Web Service,
-register `EcrSessions.WebServiceTerminal(...)` the same way; the
-[integration guide](integration-guide.md#running-in-a-web-app)
-has a complete, compile-checked example including the endpoint.
-
-**What a web app must still respect**
-
-- **Do not pass `HttpContext.RequestAborted` to a money-moving call.** Cancelling a
-  token stops the SDK *waiting*; it does not stop the payment. A shopper closing a
-  tab must not turn a sale still running at the terminal into an unknown outcome
-  nobody is watching. Pass your own `merchantReference` so you can inquire later.
-- **The terminal serves one money-moving transaction at a time.** Two concurrent
-  sales to the same terminal collide: the second gets `96`. Serialise sales per
-  terminal in your app. Inquiries are answered while busy.
-- **Never treat a lost answer as a decline.** Same rule as everywhere; see
-  [the one rule](../README.md#the-one-rule).
+**Lifetime.** Neither client keeps state between calls (from reading the source; not
+load-tested). `EcrTerminal` opens one TCP connection per call; `EcrWebServiceTerminal`
+posts through one process-wide static `HttpClient`, so one instance per request does
+not exhaust sockets either. Register one per physical terminal. A registration and
+endpoint example, plus the rules a web app must keep (no `HttpContext.RequestAborted`
+on a payment, serialise sales per terminal, keys from a secret store), are in the
+[integration guide](integration-guide.md#running-in-a-web-app).
 
 ---
 

@@ -174,6 +174,41 @@ namespace AmwalPay.Ecr.Tests
         }
 
         [Fact]
+        public void ASuccessfulCloseReceiptReadsAsIdle()
+        {
+            var answer = Json(
+                """
+                {
+                  "success": true,
+                  "responseCode": "00",
+                  "message": "OK",
+                  "data": { "merchantReference": "CLOSE-1" }
+                }
+                """);
+
+            var closed = Assert.IsType<EcrReceiptClosed.Idle>(answer.ToReceiptClosed("CLOSE-1"));
+            Assert.Equal("CLOSE-1", closed.MerchantReference);
+        }
+
+        [Fact]
+        public void ARefusedCloseReceiptCarriesItsReason()
+        {
+            var answer = Json(
+                """
+                {
+                  "success": false,
+                  "responseCode": "96",
+                  "message": "Unsupported",
+                  "errorList": [ "CLOSE_RECEIPT not supported" ]
+                }
+                """);
+
+            var refused = Assert.IsType<EcrReceiptClosed.Refused>(answer.ToReceiptClosed("CLOSE-1"));
+            Assert.Equal("96", refused.ResponseCode);
+            Assert.Equal("CLOSE_RECEIPT not supported", refused.Reason);
+        }
+
+        [Fact]
         public void ARecordWithNoStatusOfItsOwnTakesItFromTheEnvelope()
         {
             // A terminal replaying its own log of a sale answers with the sale's

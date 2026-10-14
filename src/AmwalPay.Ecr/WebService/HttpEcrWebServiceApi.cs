@@ -70,6 +70,12 @@ namespace AmwalPay.Ecr.WebService
                 EcrWebServiceRequestJson.TransactionStatus(request, _config.SecureHashKey),
                 cancellationToken).ConfigureAwait(false));
 
+        public async Task<EcrWireResponse> CloseReceiptAsync(EcrWebServiceCloseReceiptRequest request, CancellationToken cancellationToken = default) =>
+            EcrWireResponse.Parse(await PostJsonAsync(
+                EcrWebServiceOperation.CloseReceipt,
+                EcrWebServiceRequestJson.CloseReceipt(request, _config.SecureHashKey),
+                cancellationToken).ConfigureAwait(false));
+
         /// <summary>
         /// Posts <paramref name="body"/> and returns the answer as JSON. Failures —
         /// no response, an empty body, invalid JSON, an HTTP error with nothing

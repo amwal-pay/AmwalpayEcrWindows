@@ -269,6 +269,43 @@ namespace AmwalPay.Ecr.Tests.WebService
         }
 
         [Fact]
+        public void CloseReceiptPayloadMatchesExpectedWireShape()
+        {
+            var unsigned = Wire(EcrWebServiceRequestJson.CloseReceipt(
+                new EcrWebServiceCloseReceiptRequest(
+                    MerchantId: 13593,
+                    TerminalId: 126706,
+                    TerminalSerial: "P653200101973",
+                    MerchantReference: "AC4C243243C6A7C5",
+                    OriginalMerchantReference: "BB13726B7E261874",
+                    TransactionDateTime: "20261014113326")));
+
+            Assert.Equal(
+                """{"version":1,"merchantId":13593,"terminalId":126706,"terminalSerial":"P653200101973","ecrId":"ECR01","merchantReference":"AC4C243243C6A7C5","transactionDateTime":"20261014113326","requestDateTime":"20261014113326","originalMerchantReference":"BB13726B7E261874"}""",
+                unsigned);
+            Assert.DoesNotContain("messageType", unsigned);
+            Assert.DoesNotContain("currencyCode", unsigned);
+        }
+
+        [Fact]
+        public void SignedCloseReceiptIncludesSecureHashValue()
+        {
+            var json = EcrWebServiceRequestJson.CloseReceipt(
+                new EcrWebServiceCloseReceiptRequest(
+                    MerchantId: 13593,
+                    TerminalId: 126706,
+                    TerminalSerial: "P653200101973",
+                    MerchantReference: "AC4C243243C6A7C5",
+                    OriginalMerchantReference: "BB13726B7E261874",
+                    TransactionDateTime: "20261014113326"),
+                secureHashKey: WebServiceKey);
+
+            Assert.True(json.ContainsKey(WebServiceSecureHash.Field));
+            Assert.Equal(64, json.Str(WebServiceSecureHash.Field).Length);
+            Assert.DoesNotContain("secureHashValue", WebServiceSecureHash.Compose(json));
+        }
+
+        [Fact]
         public void TheWebServiceAndLanSignaturesLiveInDifferentFields()
         {
             Assert.Equal("secureHashValue", WebServiceSecureHash.Field);

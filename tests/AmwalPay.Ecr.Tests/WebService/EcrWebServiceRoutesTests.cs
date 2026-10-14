@@ -63,6 +63,18 @@ namespace AmwalPay.Ecr.Tests.WebService
         }
 
         [Fact]
+        public void CloseReceiptUsesTheFixedHubPath()
+        {
+            var routes = new EcrWebServiceRoutes(EcrEnvironment.SIT);
+
+            Assert.Equal("/Ecr/closeReceipt", routes.Path(EcrWebServiceOperation.CloseReceipt));
+            Assert.Equal(
+                "https://test.amwalpg.com:25452/Ecr/closeReceipt",
+                routes.Url(EcrWebServiceOperation.CloseReceipt));
+            Assert.Equal("/Ecr/closeReceipt", routes.Url(EcrTransactionType.CloseReceipt));
+        }
+
+        [Fact]
         public void EnvironmentFromNameFallsBackToSit()
         {
             Assert.Equal(EcrEnvironment.SIT, EcrEnvironments.FromName(null));
@@ -91,6 +103,9 @@ namespace AmwalPay.Ecr.Tests.WebService
             Assert.Equal(
                 "https://test.amwalpg.com:25453/Ecr/Inquiry",
                 routes.FullUrl(EcrWebServiceOperation.TransactionStatus));
+            Assert.Equal(
+                "https://test.amwalpg.com:25453/Ecr/closeReceipt",
+                routes.FullUrl(EcrWebServiceOperation.CloseReceipt));
         }
 
         [Fact]
@@ -100,6 +115,7 @@ namespace AmwalPay.Ecr.Tests.WebService
             Assert.Equal("Void", EcrWebServiceOperation.Void.Label());
             Assert.Equal("Refund", EcrWebServiceOperation.Refund.Label());
             Assert.Equal("Transaction status", EcrWebServiceOperation.TransactionStatus.Label());
+            Assert.Equal("Close receipt", EcrWebServiceOperation.CloseReceipt.Label());
         }
     }
 }
