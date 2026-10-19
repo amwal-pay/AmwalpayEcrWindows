@@ -56,8 +56,8 @@ workflows:
     # note that cites this workflow.
     #
     # No trigger is configured: start it by hand, or from the API, before publishing a release.
-    # A failure on net462 alone means the support statement in docs/integration-guide.md
-    # (Requirements) is wrong until fixed. Dates to revisit that statement by: .NET 8 ends
+    # A failure on net462 alone means the support statement in README.md (Install)
+    # is wrong until fixed. Dates to revisit that statement by: .NET 8 ends
     # 2026-11-10 and .NET Framework 4.6.2 ends 2027-01-12.
     instance_type: windows_x2
     max_build_duration: 30

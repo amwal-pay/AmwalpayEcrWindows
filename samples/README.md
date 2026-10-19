@@ -1,6 +1,6 @@
 # AmwalPay.Ecr.Simulator
 
-A sample for `AmwalPay.Ecr`. It runs sale, void, refund, inquiry, and close receipt through `EcrSessions` and `EcrOpenedSession`. It is a demo of the calls, not the production handling in the [integration guide](../docs/integration-guide.md#resolve-an-unknown-outcome).
+A sample for `AmwalPay.Ecr`. It runs sale, void, refund, inquiry, and close receipt through `EcrSessions` and `EcrOpenedSession`. It is a demo of the calls, not the production handling in the [README](../README.md#resolve-an-unknown-outcome).
 
 ## Run
 

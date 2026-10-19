@@ -21,7 +21,7 @@ No existing member changed signature or was removed.
   reconcile by merchant reference; never resend. `Failed.Recovered` is null for these (no
   automatic inquiry), so the inquiry is yours. A `Declined` is a refusal: `NextStep` is
   `None`. See
-  [Resolve an unknown outcome](docs/integration-guide.md#resolve-an-unknown-outcome).
+  [Resolve an unknown outcome](README.md#resolve-an-unknown-outcome).
 - Web Service: `ResponseTimeout` from `EcrSessions.Plan` is 130 s (1.0.1: 120 s); a value
   of 120 s is raised to 130 s and any other value is kept. Through `Plan`, a call gives
   up after `ConnectTimeout` + `ResponseTimeout`: 140 s with the defaults (1.0.1: 130 s).
@@ -42,8 +42,8 @@ No existing member changed signature or was removed.
     originalMerchantReference)`. The argument order differs from `EcrWebServiceTerminal`
     and both are strings, so a swap compiles: pass them by name.
   - The SDK never sends close receipt by itself. Call it from your Close receipt action.
-    See [Close receipt](docs/integration-guide.md#close-receipt) and
-    [EcrOpenedSession](docs/api-reference.md#ecropenedsession).
+    See [Close receipt](README.md#close-receipt) and
+    [Open a session](README.md#ecropenedsession).
 - Result type `EcrReceiptClosed` (`Idle`, `Refused`, `Failed`).
 - `EcrWebServiceCloseReceiptRequest` and `EcrWebServiceRequestJson.CloseReceipt`, for
   callers who build Hub requests themselves.
