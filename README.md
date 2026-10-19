@@ -2,7 +2,7 @@
 
 `AmwalPay.Ecr` drives an Amwal POS terminal from a .NET till: sale, void, refund, inquiry, e-receipt, and close receipt. Wi-Fi and USB use the terminal's ECR port. Web Service uses HTTPS to the Amwal Hub. Card data stays on the terminal.
 
-Package `AmwalPay.Ecr` **1.0.2**. Open one session, call the operation, then read the result. Member detail beyond this page is the XML documentation in the package.
+Package `AmwalPay.Ecr` **1.0.2**. Open one session, call the operation, then read the result.
 
 ## Install
 
@@ -19,13 +19,9 @@ Pin the version. A patch release can add API.
 
 <a id="ecropenedsession"></a>
 
-`EcrSessions.Plan` checks the link and the key and lists what is missing in `Issues`. It does not connect. `EcrSessions.Open` throws when `plan.IsReady` is false, then builds the client: `EcrTerminal` for Wi-Fi or USB, `EcrWebServiceTerminal` for the Hub.
+Open one session for the terminal and keep it, every sale, void, refund, inquiry, e-receipt, and close receipt can use it.
 
-Keep the `EcrOpenedSession`. It holds no connection between calls. Every operation below is a method on that same session. `usbChannel` is required for USB and ignored otherwise. `logger` defaults to `EcrLogger.None`.
-
-`LanTerminal`, `UsbCableTerminal`, and `WebServiceTerminal` return the client directly when you already hold one transport. The session is the call to use.
-
-### Wi-Fi
+### Wi-Fi implementation
 
 ```csharp
 using AmwalPay.Ecr;
@@ -43,9 +39,7 @@ if (!plan.IsReady)
 EcrOpenedSession session = EcrSessions.Open("P653200085189", plan);
 ```
 
-`EcrLink.Lan` is the Wi-Fi link. `plan.UsesLan` is true for it. `plan.ConnectionSummary` is the address an operator can read.
-
-### Web Service
+### Web Service implementation
 
 ```csharp
 EcrSessionPlan plan = EcrSessions.Plan(
@@ -61,7 +55,7 @@ EcrOpenedSession session = EcrSessions.Open("P653200008251", plan);
 
 Hub addresses stay inside the SDK. `EcrEnvironment.FromName` reads `SIT`, `UAT`, and `PROD`, ignoring case. Any other name reads as `SIT`.
 
-### USB cable
+### USB cable implementation
 
 The SDK has no USB stack. You supply an `IEcrChannel` that carries one framed request and one framed answer. Signing and results are the same as Wi-Fi. The cable key is the Wi-Fi key.
 
@@ -277,7 +271,7 @@ On `Found`, `Transaction.Stan` is the receipt number. `CanVoid` and `CanRefund` 
 
 ### Merchant reference
 
-32 characters maximum. Printable ASCII, with space, `&`, and `=` excluded. The SDK trims the value. Use one reference per attempt; an order number plus an attempt suffix fits. A void and a refund each get a new reference.
+32 characters maximum, with space, `&`, and `=` excluded. The SDK trims the value. Use one reference per attempt; an order number plus an attempt suffix fits. A void and a refund each get a new reference.
 
 ### Receipt number
 
