@@ -10,7 +10,7 @@ namespace AmwalPay.Ecr.Tests
 {
     /// <summary>
     /// The C# port serialises with System.Text.Json, which differs from
-    /// kotlinx.serialization in two ways that reach the wire: how text is
+    /// kotlinx. Serialization in two ways that reach the wire: how text is
     /// escaped, and how a number or boolean is read back as text for signing.
     /// Both are pinned here.
     /// </summary>
@@ -35,7 +35,7 @@ namespace AmwalPay.Ecr.Tests
             // Known difference from the Kotlin SDK: System.Text.Json's relaxed
             // encoder covers the BMP only, so an emoji goes out as a surrogate-pair
             // escape instead of raw UTF-8. It is the same JSON value to the terminal
-            // and the signature is composed from the value, not the spelling.
+            // and the signature is composed of the value, not the spelling.
             var json = new JsonObject { ["ecrId"] = "till-\U0001F600" };
 
             var text = EcrJson.Write(json);
@@ -103,7 +103,7 @@ namespace AmwalPay.Ecr.Tests
         [Fact]
         public async Task ASignatureStillVerifiesWhenTheFieldsCarryNonAsciiAndMarkup()
         {
-            // Signing composes from the field's text, not from its escaped form; the
+            // Signing composes of the field's text, not from its escaped form; the
             // terminal parses the wire JSON and composes the same string.
             var channel = FakeChannel.Always(null);
             var config = EcrTestConfigs.Lan with { EcrId = "Tïll <&> \"1\"", AutoInquireOnFailure = false };
@@ -250,7 +250,7 @@ namespace AmwalPay.Ecr.Tests
 
         private static IEnumerable<byte[]> Chunks(byte[] packet)
         {
-            // Every two-byte window, so a multi-byte character can be located.
+            // Every two-byte window, so a multibyte character can be located.
             for (var i = 0; i + 1 < packet.Length; i++)
             {
                 yield return new[] { packet[i], packet[i + 1] };

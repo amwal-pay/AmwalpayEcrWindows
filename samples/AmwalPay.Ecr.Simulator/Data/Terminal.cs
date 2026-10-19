@@ -32,7 +32,6 @@ public sealed class Terminal
         EcrMode.WebService => BuildWebSummary(),
         EcrMode.Bluetooth => "Bluetooth",
         EcrMode.UsbCable => "USB cable",
-        EcrMode.AppToApp => "On this device · app to app",
         EcrMode.Wifi => IpAddress.Length != 0 && Port > 0
             ? $"{IpAddress}:{Port}"
             : IpAddress.Length != 0 ? IpAddress : Mode.Label(),

@@ -6,9 +6,7 @@
       .NET Framework (WinForms/WPF till software, ASP.NET) and modern .NET. net8.0 is the
       same code without the System.Text.Json dependency, and is what .NET 8+ apps use.
 
-      Declared support: .NET Framework 4.6.2+ and .NET 8+ (see docs/compatibility.md, which also
-      records what was and was not run, and the dates on which each of those stops being
-      supported by Microsoft: .NET 8 on 2026-11-10, .NET Framework 4.6.2 on 2027-01-12).
+      Declared support: .NET Framework 4.6.2+ and .NET 8+ (see docs/integration-guide.md#requirements).
       4.6.2 is System.Text.Json 8's own floor; below it (4.6.1 and older) the package refuses to
       build cleanly, so do not lower the floor without redoing that analysis.
 

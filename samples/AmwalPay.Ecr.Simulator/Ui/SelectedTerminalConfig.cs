@@ -77,8 +77,6 @@ public sealed class SelectedTerminalConfig
         EcrMode.Bluetooth => new EcrLink.Lan(
             terminal.IpAddress,
             terminal.Port is >= 1 and <= 65535 ? terminal.Port : EcrConfig.DefaultPort),
-        // Placeholder link; Windows support gate already adds an issue.
-        EcrMode.AppToApp => new EcrLink.UsbCable(),
         _ => new EcrLink.Lan(terminal.IpAddress, EcrConfig.DefaultPort),
     };
 }

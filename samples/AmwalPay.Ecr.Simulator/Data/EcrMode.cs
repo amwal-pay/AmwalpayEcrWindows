@@ -7,7 +7,6 @@ public enum EcrMode
     Wifi = 2,
     Bluetooth = 3,
     WebService = 4,
-    AppToApp = 5,
 }
 
 public static class EcrModes
@@ -23,7 +22,6 @@ public static class EcrModes
         EcrMode.Wifi => "Wi‑Fi",
         EcrMode.Bluetooth => "Bluetooth",
         EcrMode.WebService => "Web Service",
-        EcrMode.AppToApp => "App to app",
         _ => mode.ToString(),
     };
 
@@ -37,7 +35,6 @@ public static class EcrModes
     {
         EcrMode.UsbCable => "USB cable ECR is not supported on Windows in this sample (no native USB accessory channel).",
         EcrMode.Bluetooth => "Bluetooth ECR is not supported on Windows in this sample.",
-        EcrMode.AppToApp => "App-to-app ECR is Android-only (payment app handover).",
         _ => $"{mode.Label()} is not supported on Windows in this sample.",
     };
 }
