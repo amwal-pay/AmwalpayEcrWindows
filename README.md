@@ -23,6 +23,8 @@ Open one session for the terminal and keep it, every sale, void, refund, inquiry
 
 ### Wi-Fi implementation
 
+Each terminal have IP and port will be display on idle screen use that IP and port to establish connection from till to send operations for each terminal, and the till and terminal should be on same wifi.
+
 ```csharp
 using AmwalPay.Ecr;
 
