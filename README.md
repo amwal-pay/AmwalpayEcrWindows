@@ -59,7 +59,9 @@ Hub addresses stay inside the SDK. `EcrEnvironment.FromName` reads `SIT`, `UAT`,
 
 ### USB cable implementation
 
-The SDK has no USB stack. You supply an `IEcrChannel` that carries one framed request and one framed answer. Signing and results are the same as Wi-Fi. The cable key is the Wi-Fi key.
+The till is the USB host and the terminal is the accessory. There is no IP address. The terminal profile is USB cable, and the signing key is the Wi-Fi key. `UsbAccessoryEcrChannel` asks the terminal to enter Android accessory mode, then sends the same framed messages as Wi-Fi.
+
+On Windows the till attaches the built-in WinUSB driver the first time the cable is used, and Windows asks for approval once. macOS and Linux open the cable with libusb. After the switch the terminal comes back as Google vendor `18D1`.
 
 ```csharp
 EcrSessionPlan plan = EcrSessions.Plan(
@@ -69,10 +71,8 @@ EcrSessionPlan plan = EcrSessions.Plan(
 EcrOpenedSession session = EcrSessions.Open(
     "P653200085189",
     plan,
-    usbChannel: () => OpenCable());
+    usbChannel: () => new UsbAccessoryEcrChannel());
 ```
-
-A frame is a 2-byte big-endian length followed by that many bytes of UTF-8 JSON. `EcrFrames.Wrap` builds it. `EcrFrames.ReadBodyAsync` reads one answer. `ExchangeAsync` returns the JSON bytes, without the length header. `ProbeAsync` returns `null` when the cable is usable, otherwise the reason. `Host` can be a label and `Port` is `0`. Throw `EcrChannelTimeout` when the terminal accepts the request and does not answer in `timeout`. `TcpEcrChannel` is the Wi-Fi socket the SDK opens for you.
 
 ## Operations
 
@@ -162,11 +162,11 @@ EcrReceiptClosed closed = await session.CloseReceiptAsync(
 
 `originalMerchantReference` is the sale, void, or refund you are dismissing. Web Service requires it. Wi-Fi and USB ignore it. Both session arguments are strings, so pass them by name.
 
-| Call | Sale's reference |
-|---|---|
-| `EcrOpenedSession.CloseReceiptAsync(merchantReference, originalMerchantReference)` | Second argument |
-| `EcrWebServiceTerminal.CloseReceiptAsync(originalMerchantReference, merchantReference)` | First argument |
-| `EcrTerminal.CloseReceiptAsync(merchantReference)` | None. Wi-Fi and USB only. |
+| Call                                                                                    | Sale's reference          |
+| --------------------------------------------------------------------------------------- | ------------------------- |
+| `EcrOpenedSession.CloseReceiptAsync(merchantReference, originalMerchantReference)`      | Second argument           |
+| `EcrWebServiceTerminal.CloseReceiptAsync(originalMerchantReference, merchantReference)` | First argument            |
+| `EcrTerminal.CloseReceiptAsync(merchantReference)`                                      | None. Wi-Fi and USB only. |
 
 ```csharp
 switch (closed)
@@ -227,26 +227,26 @@ switch (result)
 }
 ```
 
-| Result | Meaning |
-|---|---|
-| `Approved` | Money moved. `Amount` is what was taken or returned. `ResponseCode` is `00` on a plain approval. `MaskedPan` is masked. |
-| `Approved` with `PartialApproval` | The issuer authorised less than you asked. `RequestedAmount` is what you asked. Collect the difference before you hand over the goods. |
-| `Declined` | The terminal answered and refused. `Reason` is the text to show. `NextStep` is `None`. |
-| `Failed` and `Failure.Unreachable` | Nothing was sent. Wi-Fi and USB only. |
+| Result                                | Meaning                                                                                                                                                                |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Approved`                            | Money moved. `Amount` is what was taken or returned. `ResponseCode` is `00` on a plain approval. `MaskedPan` is masked.                                                |
+| `Approved` with `PartialApproval`     | The issuer authorised less than you asked. `RequestedAmount` is what you asked. Collect the difference before you hand over the goods.                                 |
+| `Declined`                            | The terminal answered and refused. `Reason` is the text to show. `NextStep` is `None`.                                                                                 |
+| `Failed` and `Failure.Unreachable`    | Nothing was sent. Wi-Fi and USB only.                                                                                                                                  |
 | `Failed` and `Failure.OutcomeUnknown` | The request went out and the answer did not settle it: timeout, connection lost, malformed answer, or a signature that does not match. The payment may have completed. |
-| `Failed.Settled` | Wi-Fi or USB already inquired. `Recovered` is `EcrInquiry.Found`. Record that transaction. |
-| `ArgumentException` | The call was rejected before anything was sent. A merchant reference longer than 32 characters, or one that contains a space, `&`, or `=`, throws here. |
-| `OperationCanceledException` | Your token cancelled the wait. The terminal may still complete a request that already left. |
+| `Failed.Settled`                      | Wi-Fi or USB already inquired. `Recovered` is `EcrInquiry.Found`. Record that transaction.                                                                             |
+| `ArgumentException`                   | The call was rejected before anything was sent. A merchant reference longer than 32 characters, or one that contains a space, `&`, or `=`, throws here.                |
+| `OperationCanceledException`          | Your token cancelled the wait. The terminal may still complete a request that already left.                                                                            |
 
 An answer whose `nextStep` is `INQUIRE_BY_MERCHANT_REFERENCE` arrives as `Failed` (`Timeout` or `ConnectionLost`). That includes a Web Service timeout, a lost HTTP call, an empty or unreadable body, and an HTTP 5xx with nothing readable. `Failure.OutcomeUnknown` is false only for `Unreachable`.
 
 ### Inquiry
 
-| Result | Meaning |
-|---|---|
-| `Found` | `Transaction` is the record. `Status` is the outcome (`Approved`, `Declined`, `Voided`, or other text from the backend). Compare it ignoring case. |
-| `NotFound` | This lookup returned no record. `Reason` is the backend's text when it sent any. |
-| `Failed` | The lookup itself failed. Repeat the inquiry. An inquiry does not move money. |
+| Result     | Meaning                                                                                                                                            |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Found`    | `Transaction` is the record. `Status` is the outcome (`Approved`, `Declined`, `Voided`, or other text from the backend). Compare it ignoring case. |
+| `NotFound` | This lookup returned no record. `Reason` is the backend's text when it sent any.                                                                   |
+| `Failed`   | The lookup itself failed. Repeat the inquiry. An inquiry does not move money.                                                                      |
 
 On `Found`, `Transaction.Stan` is the receipt number. `CanVoid` and `CanRefund` say whether the terminal would accept that operation now. When `PartialApproval` is set, `Amount` is what was asked and `AuthorizedAmount` is what was charged.
 
@@ -285,10 +285,10 @@ On `Found`, `Transaction.Stan` is the receipt number. `CanVoid` and `CanRefund` 
 
 ### Timeouts
 
-| Transport | Wait |
-|---|---|
-| Wi-Fi | `ConnectTimeout` 10 s, then `ResponseTimeout` 120 s. A lost answer can add one more response wait for the automatic inquiry. |
-| USB | `ResponseTimeout` 120 s is passed to your channel. |
+| Transport                  | Wait                                                                                                                                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Wi-Fi                      | `ConnectTimeout` 10 s, then `ResponseTimeout` 120 s. A lost answer can add one more response wait for the automatic inquiry.                                                                     |
+| USB                        | The till waits 120 seconds for the answer, the same as Wi-Fi.                                                                                                                                    |
 | Web Service through `Plan` | A `ResponseTimeout` of 120 s becomes `EcrConfig.WebServiceResponseTimeout` (130 s). Any other value is kept. The HTTP deadline is `ConnectTimeout` + `ResponseTimeout`: 130 s with the defaults. |
 
 `new EcrWebServiceTerminal(...)` skips the 130 s raise. Set `ResponseTimeout = EcrConfig.WebServiceResponseTimeout` on that config.
@@ -317,4 +317,3 @@ Logging is off until you pass a logger. `EcrLogger.None` discards every line. Ea
 `EcrTransactionType` is `Sale`, `Void`, `Refund`, `Inquiry`, `Receipt`, `CloseReceipt`. `EcrTransactionTypes.MenuOptions` is the operator menu: sale, void, refund, inquiry. `RequiresAmount`, `RequiresOriginalStan`, `RequiresOriginalDate`, `MovesMoney`, and `AllowsOtherTerminal` say which fields that operation needs. `EcrTerminal.RunAsync` accepts only the three that move money.
 
 `EcrWebServiceSaleRequest`, `EcrWebServiceVoidRequest`, `EcrWebServiceRefundRequest`, `EcrWebServiceTransactionStatusRequest`, and `EcrWebServiceCloseReceiptRequest` are for a caller that posts the JSON. `EcrWebServiceRequestJson` writes each body and signs it when you pass the key. The session methods do this themselves.
-
