@@ -109,7 +109,7 @@ namespace AmwalPay.Ecr
         /// <summary>
         /// Opens the transport that <paramref name="plan"/> describes.
         /// <para>
-        /// One dispatch for LAN / USB cable / Web Service so callers (and recovery
+        /// One dispatch for Wi-Fi / USB cable / Web Service so callers (and recovery
         /// paths) cannot diverge on which client they build.
         /// </para>
         /// </summary>
@@ -147,7 +147,7 @@ namespace AmwalPay.Ecr
 
         public static EcrTerminal LanTerminal(string terminalSerial, EcrSessionPlan plan, IEcrLogger? logger = null)
         {
-            if (!plan.UsesLan) throw new ArgumentException("plan is not for LAN ECR", nameof(plan));
+            if (!plan.UsesLan) throw new ArgumentException("plan is not for Wi-Fi ECR", nameof(plan));
             var lan = (EcrLink.Lan)plan.Link;
             return new EcrTerminal(lan.Host, terminalSerial, plan.Config, logger ?? EcrLogger.None);
         }
@@ -209,7 +209,7 @@ namespace AmwalPay.Ecr
 
         private static void ValidateLan(EcrLink.Lan link, List<string> issues)
         {
-            if (string.IsNullOrWhiteSpace(link.Host)) issues.Add("IP address is required for LAN ECR");
+            if (string.IsNullOrWhiteSpace(link.Host)) issues.Add("IP address is required for Wi-Fi ECR");
             if (link.Port < 1 || link.Port > 65535)
             {
                 issues.Add($"Port must be between 1 and 65535 (default {EcrConfig.DefaultPort})");
@@ -244,7 +244,7 @@ namespace AmwalPay.Ecr
                     return lan.Port >= 1 && lan.Port <= 65535 ? config with { Port = lan.Port } : config;
                 case EcrLink.WebService web:
                     // Web Service HTTP read timeout — 130s unless the caller already
-                    // overrode the LAN default (120s).
+                    // overrode the Wi-Fi default (120s).
                     var responseTimeout = config.ResponseTimeout == TimeSpan.FromSeconds(120)
                         ? EcrConfig.WebServiceResponseTimeout
                         : config.ResponseTimeout;

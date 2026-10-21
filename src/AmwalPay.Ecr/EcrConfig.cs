@@ -23,7 +23,7 @@ namespace AmwalPay.Ecr
 
         /// <summary>
         /// HTTP read timeout for Web Service REST calls (<c>/Ecr/Sale</c>, void,
-        /// refund, inquiry). Longer than the LAN default: the Hub wait includes
+        /// refund, inquiry). Longer than the Wi-Fi default: the Hub wait includes
         /// card present + PIN, and 120s was cutting sales off early.
         /// </summary>
         public static readonly TimeSpan WebServiceResponseTimeout = TimeSpan.FromSeconds(130);
@@ -94,8 +94,8 @@ namespace AmwalPay.Ecr
         /// <summary>
         /// The secret this till shares with the terminal, as hex. <b>The app owns
         /// persistence and chooses which secret to pass</b> for the selected
-        /// terminal mode (LAN vs Web Service use different secrets and signing
-        /// formats, but both are supplied through this single field). LAN ECR signs
+        /// terminal mode (Wi-Fi vs Web Service use different secrets and signing
+        /// formats, but both are supplied through this single field). Wi-Fi ECR signs
         /// sorted <c>key=value</c> pairs; Web Service ECR signs the same shape under
         /// <c>secureHashValue</c>, with HMAC-SHA256 under the hex-decoded key.
         /// </summary>

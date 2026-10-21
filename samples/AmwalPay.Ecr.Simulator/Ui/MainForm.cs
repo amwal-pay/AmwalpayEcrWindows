@@ -279,7 +279,7 @@ public sealed class MainForm : Form
         AddLabeled(root, 0, "Environment", _environmentCombo);
 
         _wifiKey.UseSystemPasswordChar = true;
-        AddLabeled(root, 1, "Wi‑Fi / LAN secure hash key", _wifiKey);
+        AddLabeled(root, 1, "Wi‑Fi secure hash key", _wifiKey);
 
         _webKey.UseSystemPasswordChar = true;
         AddLabeled(root, 2, "Web Service secure hash key", _webKey);

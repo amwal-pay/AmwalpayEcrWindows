@@ -75,7 +75,7 @@ public sealed class ConsoleHost
             _settings.Environment = EcrEnvironments.FromName(env);
         }
 
-        Console.Write("Wi‑Fi / LAN secure hash key (Enter=keep): ");
+        Console.Write("Wi‑Fi secure hash key (Enter=keep): ");
         var wifi = Console.ReadLine();
         if (wifi != null && wifi.Length > 0) _settings.WifiSecureHashKey = wifi;
 

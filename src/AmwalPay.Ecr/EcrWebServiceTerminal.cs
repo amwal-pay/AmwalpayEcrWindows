@@ -163,7 +163,7 @@ namespace AmwalPay.Ecr
         /// <paramref name="originalMerchantReference"/>.
         /// <para>
         /// Call when the cashier taps Close receipt — the same explicit action as
-        /// Wi‑Fi / USB LAN <c>CLOSE_RECEIPT</c>. Not invoked automatically by
+        /// Wi‑Fi / USB  <c>CLOSE_RECEIPT</c>. Not invoked automatically by
         /// <see cref="SaleAsync"/> / <see cref="VoidAsync"/> / <see cref="RefundAsync"/>.
         /// </para>
         /// </summary>

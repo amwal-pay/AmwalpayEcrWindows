@@ -1,12 +1,12 @@
 namespace AmwalPay.Ecr.Internal
 {
-    /// <summary>Structured request/response logging for Wi‑Fi / LAN ECR TCP calls.</summary>
+    /// <summary>Structured request/response logging for Wi‑Fi ECR TCP calls.</summary>
     internal static class EcrLanLog
     {
-        private const string Prefix = "[Wi-Fi/LAN]";
+        private const string Prefix = "[Wi-Fi/CABLE]";
 
         /// <summary>
-        /// Logs outgoing request signing so the simulator can confirm the Wi‑Fi/LAN
+        /// Logs outgoing request signing so the simulator can confirm the Wi‑Fi
         /// key — not the Web Service key — is used.
         /// </summary>
         public static void Signing(

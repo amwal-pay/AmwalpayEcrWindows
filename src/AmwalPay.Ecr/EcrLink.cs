@@ -14,7 +14,7 @@ namespace AmwalPay.Ecr
         {
         }
 
-        /// <summary>Wi‑Fi / LAN — TCP to <see cref="Host"/>:<see cref="Port"/>.</summary>
+        /// <summary>Wi‑Fi — TCP to <see cref="Host"/>:<see cref="Port"/>.</summary>
         public sealed record Lan(string Host, int Port = EcrConfig.DefaultPort) : EcrLink;
 
         /// <summary>

@@ -162,7 +162,7 @@ public static class TransactionRunner
         terminal.Mode.IsIpBased() || terminal.Mode == EcrMode.WebService;
 
     /// <summary>
-    /// Tells the terminal the cashier has finished. Wi‑Fi: LAN <c>CLOSE_RECEIPT</c>.
+    /// Tells the terminal the cashier has finished. Wi‑Fi:  <c>CLOSE_RECEIPT</c>.
     /// Web Service: <c>/Ecr/closeReceipt</c> with the sale / void / refund reference
     /// as <c>originalMerchantReference</c>. Not sent on dialog dismiss. Never throws.
     /// </summary>

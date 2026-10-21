@@ -9,7 +9,7 @@ namespace AmwalPay.Ecr.Tests
     /// </summary>
     internal static class EcrTestConfigs
     {
-        /// <summary>Wi-Fi / LAN / USB cable signing placeholder.</summary>
+        /// <summary>Wi-Fi / USB cable signing placeholder.</summary>
         public const string SecureHashKeyEcrWifi = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
         /// <summary>Alternate Wi-Fi placeholder, for wrong-key verification cases.</summary>

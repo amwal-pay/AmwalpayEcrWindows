@@ -22,7 +22,7 @@ public sealed class EcrSimulatorSettings
         }
     }
 
-    /// <summary>LAN signing key — Wi‑Fi (and USB/Bluetooth on Android).</summary>
+    /// <summary> signing key — Wi‑Fi (and USB/Bluetooth on Android).</summary>
     public string WifiSecureHashKey
     {
         get => _store.WifiSecureHashKey;
