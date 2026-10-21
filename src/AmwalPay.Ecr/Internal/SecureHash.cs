@@ -22,8 +22,8 @@ namespace AmwalPay.Ecr.Internal
         /// <summary>Field carrying the signature. Never part of what is signed.</summary>
         public const string Field = "secureHash";
 
-        /// <summary>Log label for the Wi‑Fi/LAN signing key (distinct from Web Service).</summary>
-        public const string KeyLabel = "Wi-Fi/LAN secure hash key";
+        /// <summary>Log label for the Wi‑Fi signing key (distinct from Web Service).</summary>
+        public const string KeyLabel = "Wi-Fi/CABLE secure hash key";
 
         private const int NonceBytes = 16;
 

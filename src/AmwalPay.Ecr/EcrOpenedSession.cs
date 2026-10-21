@@ -7,7 +7,7 @@ namespace AmwalPay.Ecr
     /// <summary>
     /// One opened transport for a validated <see cref="EcrSessionPlan"/>.
     /// <para>
-    /// Apps open this through <see cref="EcrSessions.Open"/> so LAN / USB / Web
+    /// Apps open this through <see cref="EcrSessions.Open"/> so Wi-Fi / USB / Web
     /// Service dispatch lives in one place — sale, inquiry, and recovery then share
     /// the same path.
     /// </para>
@@ -30,7 +30,7 @@ namespace AmwalPay.Ecr
 
         public bool UsesLocalTerminal => _local != null;
 
-        /// <summary>Receipt URLs exist only on the local (LAN / USB) protocol.</summary>
+        /// <summary>Receipt URLs exist only on the local (Wi-Fi / USB) protocol.</summary>
         public bool SupportsReceipt => _local != null;
 
         /// <summary>
@@ -125,7 +125,7 @@ namespace AmwalPay.Ecr
         /// <summary>
         /// Asks the terminal to put its receipt away and go back to its idle screen.
         /// <para>
-        /// On Wi‑Fi / USB this is a LAN <c>CLOSE_RECEIPT</c> message. On Web Service it
+        /// On Wi‑Fi / USB this is a <c>CLOSE_RECEIPT</c> message. On Web Service it
         /// posts <c>/Ecr/closeReceipt</c> with <paramref name="originalMerchantReference"/>
         /// naming the sale / void / refund that just finished. Call from the till’s
         /// Close receipt action when the cashier is finished with the result — not as
@@ -136,7 +136,7 @@ namespace AmwalPay.Ecr
         /// </summary>
         /// <param name="merchantReference">This close request's own id (blank → generated).</param>
         /// <param name="originalMerchantReference">
-        /// Required on Web Service — the money operation's merchant reference. Ignored on LAN.
+        /// Required on Web Service — the money operation's merchant reference. Ignored on Wi-Fi.
         /// </param>
         public Task<EcrReceiptClosed> CloseReceiptAsync(
             string merchantReference = "",

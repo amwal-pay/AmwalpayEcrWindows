@@ -7,11 +7,11 @@ namespace AmwalPay.Ecr.WebService
 {
     /// <summary>
     /// Web Service ECR wire payload — Hub contract field set per operation, signed
-    /// with <see cref="WebServiceSecureHash"/> (HMAC over the JSON body). Wi‑Fi/LAN uses
+    /// with <see cref="WebServiceSecureHash"/> (HMAC over the JSON body). Wi‑Fi uses
     /// <see cref="SecureHash.Compose"/> instead; do not mix the two.
     /// <para>
     /// Hub path selects the operation; the body also carries <c>messageType</c> for
-    /// parity with LAN / Hub correlation.
+    /// parity with Wi-Fi / Hub correlation.
     /// </para>
     /// </summary>
     internal static class EcrWebServiceMessage
@@ -81,19 +81,19 @@ namespace AmwalPay.Ecr.WebService
                     body["originalTerminalId"] = terminalId;
                     break;
                 case EcrTransactionType.Inquiry:
-                {
-                    var invoiceStan = EcrMessage.PaddedStan(stan);
-                    var byStan = invoiceStan.Length != 0;
-                    var byReference = !byStan && !string.IsNullOrWhiteSpace(originalMerchantReference);
-                    body["stan"] = invoiceStan;
-                    body["originalTransactionDate"] = originalTransactionDate;
-                    // By STAN → empty originalMerchantReference; by reference → set it.
-                    body["originalMerchantReference"] = byReference
-                        ? EcrMessage.ResolveMerchantReference(originalMerchantReference)
-                        : "";
-                    body["originalTerminalId"] = terminalId;
-                    break;
-                }
+                    {
+                        var invoiceStan = EcrMessage.PaddedStan(stan);
+                        var byStan = invoiceStan.Length != 0;
+                        var byReference = !byStan && !string.IsNullOrWhiteSpace(originalMerchantReference);
+                        body["stan"] = invoiceStan;
+                        body["originalTransactionDate"] = originalTransactionDate;
+                        // By STAN → empty originalMerchantReference; by reference → set it.
+                        body["originalMerchantReference"] = byReference
+                            ? EcrMessage.ResolveMerchantReference(originalMerchantReference)
+                            : "";
+                        body["originalTerminalId"] = terminalId;
+                        break;
+                    }
                 case EcrTransactionType.Receipt:
                     throw new InvalidOperationException("Receipt is not a Web Service operation");
                 default:

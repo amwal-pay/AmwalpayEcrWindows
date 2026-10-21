@@ -172,7 +172,7 @@ public sealed class TerminalEditForm : Form
         _hint.Text = mode.IsSupportedOnWindows()
             ? mode switch
             {
-                EcrMode.Wifi => "Wi‑Fi / LAN: TCP to the terminal on the local network.",
+                EcrMode.Wifi => "Wi‑Fi: TCP to the terminal on the local network.",
                 EcrMode.WebService => "Web Service: HTTPS to Amwal Hub (merchant + terminal IDs required).",
                 _ => "",
             }

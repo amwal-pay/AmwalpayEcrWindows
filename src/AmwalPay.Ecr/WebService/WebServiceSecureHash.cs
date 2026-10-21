@@ -12,7 +12,7 @@ namespace AmwalPay.Ecr.WebService
     /// Platform <c>calcHash(obj, secret)</c> — <c>obj</c> is <b>not</b> the raw JSON
     /// body. It is the sorted <c>key=value&amp;key=value</c> string built from every
     /// top-level scalar in the request <b>except</b> <see cref="Field"/>, the same
-    /// rules as the LAN <c>SecureHash.Compose</c> and the POS
+    /// rules as the Wi-Fi <c>SecureHash.Compose</c> and the POS
     /// <c>SecureHashInterceptor.composeData</c>.
     /// </para>
     /// <code>
@@ -27,7 +27,7 @@ namespace AmwalPay.Ecr.WebService
         /// <summary>Field added to signed Web Service request bodies.</summary>
         public const string Field = "secureHashValue";
 
-        /// <summary>Log label for the Web Service signing key (distinct from Wi‑Fi/LAN).</summary>
+        /// <summary>Log label for the Web Service signing key (distinct from Wi‑Fi).</summary>
         public const string KeyLabel = "Web Service secure hash key";
 
         /// <summary>
@@ -74,7 +74,7 @@ namespace AmwalPay.Ecr.WebService
         public static string PayloadString(JsonObject body) => Compose(body);
 
         /// <summary>
-        /// The exact bytes both sides agree to sign. Same rules as LAN
+        /// The exact bytes both sides agree to sign. Same rules as Wi-Fi
         /// <c>SecureHash.Compose</c>, but excluding <see cref="Field"/> instead of
         /// <c>secureHash</c>.
         /// </summary>

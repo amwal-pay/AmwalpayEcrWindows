@@ -26,7 +26,7 @@ namespace AmwalPay.Ecr.WebService
 
         /// <summary>
         /// Logs the <c>calcHash</c> inputs and output so the simulator can confirm
-        /// the Web Service key — not the Wi‑Fi/LAN key — is used.
+        /// the Web Service key — not the Wi‑Fi key — is used.
         /// </summary>
         public static void Signing(IEcrLogger logger, string keyLabel, string secretKey, string payloadToSign, string secureHashValue)
         {

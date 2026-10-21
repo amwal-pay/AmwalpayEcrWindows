@@ -37,7 +37,7 @@
     <Authors>Amwal Pay</Authors>
     <Company>Amwal Pay</Company>
     <Product>Amwal ECR SDK</Product>
-    <Description>Amwal POS terminal ECR SDK for .NET (v1.0.2): sale, void, refund, inquiry by STAN or merchant reference, LAN receipt fetch, and close-receipt (LAN CLOSE_RECEIPT / Hub /Ecr/closeReceipt). Wi-Fi/LAN TCP or Web Service HTTPS to the Amwal Hub. Targets .NET Framework 4.6.2+ (4.7.2+ recommended) and .NET 8+; no card data touches your application.</Description>
+    <Description>Amwal POS terminal ECR SDK for .NET (v1.0.2): sale, void, refund, inquiry by STAN or merchant reference, Wi-Fi receipt fetch, and close-receipt (Wi-Fi CLOSE_RECEIPT / Hub /Ecr/closeReceipt). Wi-Fi/CABLE TCP or Web Service HTTPS to the Amwal Hub. Targets .NET Framework 4.6.2+ (4.7.2+ recommended) and .NET 8+; no card data touches your application.</Description>
     <PackageTags>amwal;pos;ecr;payments;payment-terminal;point-of-sale;sdk;netstandard</PackageTags>
     <PackageProjectUrl>https://amwal-pay.com</PackageProjectUrl>
     <RepositoryUrl>https://github.com/amwal-pay/AmwalpayEcrWindows</RepositoryUrl>
