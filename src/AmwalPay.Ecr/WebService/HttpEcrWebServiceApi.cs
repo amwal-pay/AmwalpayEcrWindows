@@ -76,6 +76,19 @@ namespace AmwalPay.Ecr.WebService
                 EcrWebServiceRequestJson.CloseReceipt(request, _config.SecureHashKey),
                 cancellationToken).ConfigureAwait(false));
 
+        public async Task<EcrWireResponse> SettleAsync(EcrWebServiceSettleRequest request, CancellationToken cancellationToken = default) =>
+            EcrWireResponse.Parse(await PostJsonAsync(
+                EcrWebServiceOperation.Settle,
+                EcrWebServiceRequestJson.Settle(request, _config.SecureHashKey),
+                cancellationToken).ConfigureAwait(false));
+
+        public async Task<EcrWireResponse> CheckReachabilityAsync(EcrWebServiceCheckReachabilityRequest request, CancellationToken cancellationToken = default) =>
+            EcrWireResponse.Parse(await PostJsonAsync(
+                EcrWebServiceOperation.CheckReachability,
+                EcrWebServiceRequestJson.CheckReachability(request, _config.SecureHashKey),
+                cancellationToken,
+                deadline: _config.ProbeTimeout).ConfigureAwait(false));
+
         /// <summary>
         /// Posts <paramref name="body"/> and returns the answer as JSON. Failures —
         /// no response, an empty body, invalid JSON, an HTTP error with nothing
@@ -85,11 +98,13 @@ namespace AmwalPay.Ecr.WebService
         internal async Task<JsonObject> PostJsonAsync(
             EcrWebServiceOperation operation,
             JsonObject body,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            TimeSpan? deadline = null)
         {
             var clock = Stopwatch.StartNew();
             var payload = EcrJson.Write(body);
             var url = Routes.FullUrl(operation);
+            var budget = deadline ?? (_config.ConnectTimeout + _config.ResponseTimeout);
 
             // Request payload first so operators see what is about to leave.
             WebServiceHttpLog.Request(_logger, operation, url, _config.Environment, payload);
@@ -97,7 +112,7 @@ namespace AmwalPay.Ecr.WebService
 
             // Connect and read budgets are separate in the terminal API; over
             // HttpClient they are one deadline covering both.
-            using var timeoutCts = new CancellationTokenSource(_config.ConnectTimeout + _config.ResponseTimeout);
+            using var timeoutCts = new CancellationTokenSource(budget);
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
             try
@@ -157,7 +172,7 @@ namespace AmwalPay.Ecr.WebService
             catch (Exception e) when (e is HttpRequestException || e is OperationCanceledException || e is System.IO.IOException)
             {
                 var message = e is OperationCanceledException
-                    ? $"Timed out after {EcrTerminal.FormatDuration(_config.ConnectTimeout + _config.ResponseTimeout)}"
+                    ? $"Timed out after {EcrTerminal.FormatDuration(budget)}"
                     : (string.IsNullOrEmpty(e.Message) ? "Web Service request failed" : e.Message);
                 WebServiceHttpLog.Error(_logger, operation, message, clock.ElapsedMilliseconds);
                 return ErrorBody("NO_RESPONSE", message);

@@ -53,14 +53,22 @@ namespace AmwalPay.Ecr
         /// <see cref="EcrOpenedSession.CloseReceiptAsync"/>. Not a menu choice.
         /// </summary>
         CloseReceipt,
+
+        /// <summary>
+        /// Closes the terminal's current batch and prints the settlement receipt.
+        /// Run it with <see cref="EcrTerminal.SettlementAsync"/> or
+        /// <see cref="EcrOpenedSession.SettlementAsync"/>. Wi-Fi and USB cable only.
+        /// Not a menu choice — the till confirms with the cashier first, because
+        /// the terminal starts as soon as the message arrives.
+        /// </summary>
+        Settlement,
     }
 
     public static class EcrTransactionTypes
     {
         /// <summary>
         /// The operations an operator picks from, in the order a till usually
-        /// offers them. <see cref="EcrTransactionType.Receipt"/> and
-        /// <see cref="EcrTransactionType.CloseReceipt"/> are absent by design.
+        /// offers them. Receipt, close receipt, and settlement are absent by design.
         /// </summary>
         public static IReadOnlyList<EcrTransactionType> MenuOptions { get; } = new[]
         {
@@ -79,6 +87,7 @@ namespace AmwalPay.Ecr
             EcrTransactionType.Inquiry => "INQUIRY",
             EcrTransactionType.Receipt => "RECEIPT",
             EcrTransactionType.CloseReceipt => "CLOSE_RECEIPT",
+            EcrTransactionType.Settlement => "SETTLEMENT",
             _ => throw new ArgumentOutOfRangeException(nameof(type)),
         };
 
@@ -91,6 +100,7 @@ namespace AmwalPay.Ecr
             EcrTransactionType.Inquiry => "Inquiry",
             EcrTransactionType.Receipt => "Receipt",
             EcrTransactionType.CloseReceipt => "Close receipt",
+            EcrTransactionType.Settlement => "Settlement",
             _ => throw new ArgumentOutOfRangeException(nameof(type)),
         };
 

@@ -32,6 +32,19 @@ namespace AmwalPay.Ecr.WebService
             string merchantReference = "",
             string transactionDateTime = "")
         {
+            if (type == EcrTransactionType.Settlement)
+            {
+                return BuildPlain(
+                    merchantId: merchantId,
+                    terminalId: terminalId,
+                    terminalSerial: terminalSerial,
+                    secureHashKey: secureHashKey,
+                    currencyCode: currencyCode,
+                    ecrId: ecrId,
+                    merchantReference: merchantReference,
+                    transactionDateTime: transactionDateTime);
+            }
+
             if (type == EcrTransactionType.CloseReceipt)
             {
                 return BuildCloseReceipt(
@@ -139,6 +152,40 @@ namespace AmwalPay.Ecr.WebService
                 ["transactionDateTime"] = wireDateTime,
                 ["requestDateTime"] = wireDateTime,
                 ["originalMerchantReference"] = EcrMessage.ResolveMerchantReference(originalMerchantReference),
+            };
+
+            var json = secureHashKey.Length == 0 ? body : WebServiceSecureHash.WithHash(body, secureHashKey);
+            return (reference, json);
+        }
+
+        /// <summary>
+        /// Hub <c>/Ecr/settle</c> and <c>/Ecr/CheckReachability</c> share this body:
+        /// identity, currency, both timestamps, then <c>secureHashValue</c>. The path
+        /// selects the operation, so there is no <c>messageType</c>.
+        /// </summary>
+        public static (string Reference, JsonObject Json) BuildPlain(
+            long merchantId,
+            long terminalId,
+            string terminalSerial,
+            string secureHashKey,
+            string currencyCode = "512",
+            string ecrId = "ECR01",
+            string merchantReference = "",
+            string transactionDateTime = "")
+        {
+            var reference = EcrMessage.ResolveMerchantReference(merchantReference);
+            var wireDateTime = transactionDateTime.Length != 0 ? transactionDateTime : Timestamp();
+            var body = new JsonObject
+            {
+                ["version"] = EcrMessage.ProtocolVersion,
+                ["merchantId"] = merchantId,
+                ["terminalId"] = terminalId,
+                ["terminalSerial"] = terminalSerial,
+                ["ecrId"] = ecrId,
+                ["merchantReference"] = reference,
+                ["currencyCode"] = currencyCode,
+                ["transactionDateTime"] = wireDateTime,
+                ["requestDateTime"] = wireDateTime,
             };
 
             var json = secureHashKey.Length == 0 ? body : WebServiceSecureHash.WithHash(body, secureHashKey);

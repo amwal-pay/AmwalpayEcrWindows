@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Numerics;
 using System.Text;
@@ -204,6 +205,79 @@ namespace AmwalPay.Ecr.Internal
             }
 
             return new EcrReceiptClosed.Idle(resolvedReference, EcrJson.Write(json));
+        }
+
+        /// <summary>The types a settlement reports totals for, in receipt order.</summary>
+        private static readonly string[] SettlementTotalTypes =
+        {
+            "SALE", "REFUND", "VOID", "PRE_AUTH", "CAPTURE",
+        };
+
+        /// <summary>
+        /// Reads the answer to a settlement.
+        /// <para>
+        /// <c>settlementStatus</c> decides the branch, not the envelope alone: an
+        /// empty batch is a success with nothing in it, and a refusal before the
+        /// settlement started — busy, not idle, a terminal too old to know it —
+        /// carries no status at all.
+        /// </para>
+        /// </summary>
+        public static EcrSettlement ToSettlement(this JsonObject json, string merchantReference, int minorUnitDigits)
+        {
+            var envelope = EcrResponseEnvelope.Parse(json);
+            var data = envelope.Data;
+            var resolvedReference = Or(envelope.MerchantReference, merchantReference);
+            var status = data?.Str("settlementStatus") ?? "";
+            var raw = EcrJson.Write(json);
+
+            if (envelope.Success && status == "NO_TRANSACTIONS")
+            {
+                var message = envelope.DisplayMessage;
+                return new EcrSettlement.NothingToSettle(
+                    resolvedReference,
+                    message.Length != 0 ? message : "There are no transactions to settle",
+                    raw);
+            }
+
+            if (!envelope.Success || data == null || status != "SETTLED")
+            {
+                var reason = envelope.DisplayMessage;
+                return new EcrSettlement.NotSettled(
+                    MerchantReference: resolvedReference,
+                    ResponseCode: envelope.ResponseCode,
+                    Status: status,
+                    Reason: reason.Length != 0 ? reason : "The batch was not settled",
+                    UploadedTransactions: WholeNumber(data, "uploadedTransactions"),
+                    Raw: raw);
+            }
+
+            var totalsNode = data["totals"] as JsonObject;
+            var totals = new Dictionary<string, EcrSettlementTotal>(SettlementTotalTypes.Length);
+            foreach (var type in SettlementTotalTypes)
+            {
+                var row = totalsNode?[type] as JsonObject;
+                totals[type] = row == null
+                    ? new EcrSettlementTotal(0, MajorUnits("0", minorUnitDigits))
+                    : new EcrSettlementTotal(WholeNumber(row, "count") ?? 0, MajorUnits(row.Str("amount"), minorUnitDigits));
+            }
+
+            return new EcrSettlement.Settled(
+                MerchantReference: resolvedReference,
+                BatchId: data.Str("batchId"),
+                Currency: data.Str("currency"),
+                StartTime: data.Str("startTime"),
+                EndTime: data.Str("endTime"),
+                TotalTransactions: WholeNumber(data, "totalTransactions") ?? 0,
+                NetAmount: MajorUnits(data.Str("netAmount"), minorUnitDigits),
+                Totals: totals,
+                Raw: raw);
+        }
+
+        private static int? WholeNumber(JsonObject? json, string key)
+        {
+            if (json == null) return null;
+            var text = json.Str(key);
+            return int.TryParse(text, out var value) ? value : null;
         }
 
         /// <summary>

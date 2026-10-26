@@ -34,11 +34,27 @@ namespace AmwalPay.Ecr
         public bool SupportsReceipt => _local != null;
 
         /// <summary>
-        /// Reachability for local links, or <c>null</c> when Web Service — Hub HTTPS
-        /// has no pre-flight probe equivalent.
+        /// Wi-Fi and USB send <c>SETTLEMENT</c>. Web Service posts <c>/Ecr/settle</c>.
+        /// </summary>
+        public bool SupportsSettlement => _local != null || _web != null;
+
+        /// <summary>
+        /// Wi-Fi and USB probe the link before a sale. Web Service returns null:
+        /// <c>/Ecr/CheckReachability</c> is <see cref="CheckReachabilityAsync"/>,
+        /// called on its own.
         /// </summary>
         public async Task<EcrReachability?> ProbeReachabilityAsync(CancellationToken cancellationToken = default) =>
             _local == null ? null : await _local.ProbeReachabilityAsync(cancellationToken).ConfigureAwait(false);
+
+        /// <summary>
+        /// Posts <c>/Ecr/CheckReachability</c>. Null when this session is not Web Service.
+        /// A sale does not call this.
+        /// </summary>
+        public async Task<EcrReachability?> CheckReachabilityAsync(CancellationToken cancellationToken = default)
+        {
+            if (_web == null) return null;
+            return await _web.ProbeReachabilityAsync(cancellationToken).ConfigureAwait(false);
+        }
 
         public Task<EcrResult> SaleAsync(decimal amount, string merchantReference = "", CancellationToken cancellationToken = default)
         {
@@ -169,6 +185,21 @@ namespace AmwalPay.Ecr
                 return _web.CloseReceiptAsync(original, closeReference, cancellationToken);
             }
 
+            throw NoTransport();
+        }
+
+        /// <summary>
+        /// Closes the current batch. Wi-Fi and USB send <c>SETTLEMENT</c>. Web
+        /// Service posts <c>/Ecr/settle</c>. Confirm with the cashier before
+        /// calling — the close starts as soon as the request arrives.
+        /// </summary>
+        /// <param name="merchantReference">This request's own id (blank → generated).</param>
+        public Task<EcrSettlement> SettlementAsync(
+            string merchantReference = "",
+            CancellationToken cancellationToken = default)
+        {
+            if (_local != null) return _local.SettlementAsync(merchantReference, cancellationToken);
+            if (_web != null) return _web.SettlementAsync(merchantReference, cancellationToken);
             throw NoTransport();
         }
 

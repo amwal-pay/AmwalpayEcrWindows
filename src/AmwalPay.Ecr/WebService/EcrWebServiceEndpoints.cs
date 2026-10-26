@@ -8,5 +8,7 @@ namespace AmwalPay.Ecr.WebService
         public const string Refund = "/Ecr/Refund";
         public const string TransactionStatus = "/Ecr/Inquiry";
         public const string CloseReceipt = "/Ecr/closeReceipt";
+        public const string Settle = "/Ecr/settle";
+        public const string CheckReachability = "/Ecr/CheckReachability";
     }
 }

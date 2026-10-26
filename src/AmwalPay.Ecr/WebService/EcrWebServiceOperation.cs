@@ -10,6 +10,8 @@ namespace AmwalPay.Ecr.WebService
         Refund,
         TransactionStatus,
         CloseReceipt,
+        Settle,
+        CheckReachability,
     }
 
     internal static class EcrWebServiceOperations
@@ -21,6 +23,8 @@ namespace AmwalPay.Ecr.WebService
             EcrWebServiceOperation.Refund => EcrWebServiceEndpoints.Refund,
             EcrWebServiceOperation.TransactionStatus => EcrWebServiceEndpoints.TransactionStatus,
             EcrWebServiceOperation.CloseReceipt => EcrWebServiceEndpoints.CloseReceipt,
+            EcrWebServiceOperation.Settle => EcrWebServiceEndpoints.Settle,
+            EcrWebServiceOperation.CheckReachability => EcrWebServiceEndpoints.CheckReachability,
             _ => throw new ArgumentOutOfRangeException(nameof(operation)),
         };
 
@@ -31,6 +35,8 @@ namespace AmwalPay.Ecr.WebService
             EcrWebServiceOperation.Refund => "Refund",
             EcrWebServiceOperation.TransactionStatus => "Transaction status",
             EcrWebServiceOperation.CloseReceipt => "Close receipt",
+            EcrWebServiceOperation.Settle => "Settlement",
+            EcrWebServiceOperation.CheckReachability => "Check reachability",
             _ => throw new ArgumentOutOfRangeException(nameof(operation)),
         };
 
@@ -43,6 +49,7 @@ namespace AmwalPay.Ecr.WebService
             EcrTransactionType.Inquiry => EcrWebServiceOperation.TransactionStatus,
             EcrTransactionType.CloseReceipt => EcrWebServiceOperation.CloseReceipt,
             EcrTransactionType.Receipt => null,
+            EcrTransactionType.Settlement => EcrWebServiceOperation.Settle,
             _ => throw new ArgumentOutOfRangeException(nameof(type)),
         };
     }

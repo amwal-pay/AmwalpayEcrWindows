@@ -209,6 +209,118 @@ namespace AmwalPay.Ecr
             return response.ToReceiptClosed(built.Reference);
         }
 
+        /// <summary>
+        /// Posts <c>/Ecr/settle</c>. Confirm with the cashier before calling: the
+        /// Hub starts the close as soon as the request arrives. The answer is read
+        /// the same way as a Wi-Fi <c>SETTLEMENT</c>.
+        /// </summary>
+        /// <param name="merchantReference">This request's own id (blank → generated).</param>
+        public async Task<EcrSettlement> SettlementAsync(
+            string merchantReference = "",
+            CancellationToken cancellationToken = default)
+        {
+            var ids = BackendIds();
+            if (ids == null)
+            {
+                return new EcrSettlement.Failed(
+                    merchantReference,
+                    new Failure.Malformed("merchantId and terminalId are required for Web Service ECR"));
+            }
+
+            var built = Plain(
+                ids.Value,
+                merchantReference,
+                EcrWebServiceOperation.Settle);
+            var response = await _api.PostJsonAsync(
+                EcrWebServiceOperation.Settle, built.Json, cancellationToken).ConfigureAwait(false);
+            if (Lost(response))
+            {
+                var reason = response.Str("message");
+                return new EcrSettlement.Failed(
+                    built.Reference,
+                    new Failure.ConnectionLost(reason.Length != 0 ? reason : "The Web Service did not answer"));
+            }
+
+            return response.ToSettlement(built.Reference, _config.MinorUnitDigits);
+        }
+
+        /// <summary>
+        /// Posts <c>/Ecr/CheckReachability</c> with the probe budget, so a Hub that
+        /// does not answer does not consume the sale's response timeout.
+        /// </summary>
+        public async Task<EcrReachability> ProbeReachabilityAsync(CancellationToken cancellationToken = default)
+        {
+            var origin = _api.Routes.HubOrigin();
+            Uri uri;
+            try
+            {
+                uri = new Uri(origin);
+            }
+            catch (UriFormatException)
+            {
+                return new EcrReachability(false, origin, 0, "The Web Service address is not a URL", origin);
+            }
+
+            var port = uri.IsDefaultPort ? (uri.Scheme == "https" ? 443 : 80) : uri.Port;
+            var ids = BackendIds();
+            if (ids == null)
+            {
+                return new EcrReachability(
+                    false,
+                    uri.Host,
+                    port,
+                    "merchantId and terminalId are required for Web Service ECR",
+                    origin);
+            }
+
+            var built = Plain(ids.Value, "", EcrWebServiceOperation.CheckReachability);
+            var response = await _api.PostJsonAsync(
+                EcrWebServiceOperation.CheckReachability,
+                built.Json,
+                cancellationToken,
+                deadline: _config.ProbeTimeout).ConfigureAwait(false);
+
+            if (Lost(response) || !EcrResponseEnvelope.Parse(response).Success)
+            {
+                var reason = response.Str("message");
+                if (reason.Length == 0) reason = EcrResponseEnvelope.Parse(response).DisplayMessage;
+                return new EcrReachability(
+                    false,
+                    uri.Host,
+                    port,
+                    reason.Length != 0 ? reason : "The terminal is not reachable",
+                    origin);
+            }
+
+            return new EcrReachability(true, uri.Host, port, null, origin);
+        }
+
+        private (string Reference, JsonObject Json) Plain(
+            (long MerchantId, long TerminalId) ids,
+            string merchantReference,
+            EcrWebServiceOperation operation)
+        {
+            var built = EcrWebServiceMessage.BuildPlain(
+                merchantId: ids.MerchantId,
+                terminalId: ids.TerminalId,
+                terminalSerial: _terminalSerial,
+                secureHashKey: _config.SecureHashKey,
+                currencyCode: _config.CurrencyCode,
+                ecrId: _config.EcrId,
+                merchantReference: merchantReference);
+            WebServiceHttpLog.Operation(
+                _logger,
+                operation.Label(),
+                built.Reference,
+                _terminalSerial,
+                ids.MerchantId,
+                ids.TerminalId);
+            return built;
+        }
+
+        private static bool Lost(JsonObject response) =>
+            response.Str("nextStep") == HttpEcrWebServiceApi.UnknownOutcomeStep && response["data"] is null;
+
         private (string Reference, JsonObject Body) BuildRequest(
             EcrTransactionType type,
             (long MerchantId, long TerminalId) ids,
