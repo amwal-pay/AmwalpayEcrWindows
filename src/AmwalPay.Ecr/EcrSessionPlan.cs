@@ -41,8 +41,8 @@ namespace AmwalPay.Ecr
                 {
                     case EcrLink.Lan lan:
                         return $"{lan.Host}:{Config.Port}";
-                    case EcrLink.UsbCable:
-                        return "USB cable";
+                    case EcrLink.UsbCable cable:
+                        return cable.ComPort.Length != 0 ? cable.ComPort : "USB cable";
                     case EcrLink.WebService web:
                         var summary = new StringBuilder(Config.Environment.ToString());
                         if (web.MerchantId.Length != 0) summary.Append(" · merchant ").Append(web.MerchantId);

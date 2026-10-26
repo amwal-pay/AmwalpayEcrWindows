@@ -20,12 +20,12 @@ namespace AmwalPay.Ecr
         /// <summary>
         /// A USB cable straight from this till to the terminal.
         /// <para>
-        /// No address, because no IP is involved. There is nothing to configure,
-        /// so there is nothing here to carry — the cable is found by looking at
-        /// what is plugged in, by the <see cref="IEcrChannel"/> you supply.
+        /// <see cref="ComPort"/> is the virtual serial port Windows assigned to
+        /// that cable, such as <c>COM8</c> ("MediaTek USB VCOM"). The line is
+        /// 115200 8N1. Empty means the operator has not chosen a port yet.
         /// </para>
         /// </summary>
-        public sealed record UsbCable : EcrLink;
+        public sealed record UsbCable(string ComPort = "") : EcrLink;
 
         /// <summary>Hosted REST — HTTPS with JSON body signing.</summary>
         public sealed record WebService(string MerchantId, string TerminalId) : EcrLink;
