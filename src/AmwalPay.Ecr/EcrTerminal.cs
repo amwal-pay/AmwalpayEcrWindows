@@ -314,6 +314,29 @@ namespace AmwalPay.Ecr
         }
 
         /// <summary>
+        /// Closes the current batch. The terminal starts as soon as this arrives:
+        /// the till confirms with the cashier before calling. Uses the full response
+        /// timeout, because a close can wait on pending reversals. Safe to repeat
+        /// when the answer is lost — a batch that closed answers
+        /// <see cref="EcrSettlement.NothingToSettle"/> the next time, and one that
+        /// did not settles on the retry.
+        /// </summary>
+        /// <param name="merchantReference">The till's own reference for the request.</param>
+        public async Task<EcrSettlement> SettlementAsync(
+            string merchantReference = "",
+            CancellationToken cancellationToken = default)
+        {
+            var message = Build(
+                EcrTransactionType.Settlement,
+                merchantReference: merchantReference);
+
+            var answer = await ExchangeAsync(message, cancellationToken).ConfigureAwait(false);
+            return answer.Failure != null
+                ? new EcrSettlement.Failed(message.MerchantReference, answer.Failure)
+                : answer.Json!.ToSettlement(message.MerchantReference, _config.MinorUnitDigits);
+        }
+
+        /// <summary>
         /// Runs any operation that moves money. The typed methods above are the
         /// usual way in; this is for a caller driving the type from its own UI.
         /// <see cref="EcrTransactionType.Inquiry"/> is not accepted here — it

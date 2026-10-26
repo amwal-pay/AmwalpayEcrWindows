@@ -221,6 +221,7 @@ namespace AmwalPay.Ecr.Tests
 
             var unavailable = Assert.IsType<EcrReceipt.Unavailable>(receipt);
             Assert.Contains("only supported over", unavailable.Reason);
+            Assert.True(session.SupportsSettlement);
             Assert.Null(await session.ProbeReachabilityAsync());
         }
 

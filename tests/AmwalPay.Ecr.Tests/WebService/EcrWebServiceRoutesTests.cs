@@ -63,6 +63,20 @@ namespace AmwalPay.Ecr.Tests.WebService
         }
 
         [Fact]
+        public void SettleAndCheckReachabilityUseTheFixedHubPaths()
+        {
+            var routes = new EcrWebServiceRoutes(EcrEnvironment.SIT);
+
+            Assert.Equal("/Ecr/settle", routes.Path(EcrWebServiceOperation.Settle));
+            Assert.Equal("/Ecr/settle", routes.Url(EcrTransactionType.Settlement));
+            Assert.Equal("https://test.amwalpg.com:25452/Ecr/settle", routes.Url(EcrWebServiceOperation.Settle));
+            Assert.Equal("/Ecr/CheckReachability", routes.Path(EcrWebServiceOperation.CheckReachability));
+            Assert.Equal(
+                "https://test.amwalpg.com:25452/Ecr/CheckReachability",
+                routes.Url(EcrWebServiceOperation.CheckReachability));
+        }
+
+        [Fact]
         public void CloseReceiptUsesTheFixedHubPath()
         {
             var routes = new EcrWebServiceRoutes(EcrEnvironment.SIT);
@@ -106,6 +120,10 @@ namespace AmwalPay.Ecr.Tests.WebService
             Assert.Equal(
                 "https://test.amwalpg.com:25453/Ecr/closeReceipt",
                 routes.FullUrl(EcrWebServiceOperation.CloseReceipt));
+            Assert.Equal("https://test.amwalpg.com:25453/Ecr/settle", routes.FullUrl(EcrWebServiceOperation.Settle));
+            Assert.Equal(
+                "https://test.amwalpg.com:25453/Ecr/CheckReachability",
+                routes.FullUrl(EcrWebServiceOperation.CheckReachability));
         }
 
         [Fact]
@@ -116,6 +134,8 @@ namespace AmwalPay.Ecr.Tests.WebService
             Assert.Equal("Refund", EcrWebServiceOperation.Refund.Label());
             Assert.Equal("Transaction status", EcrWebServiceOperation.TransactionStatus.Label());
             Assert.Equal("Close receipt", EcrWebServiceOperation.CloseReceipt.Label());
+            Assert.Equal("Settlement", EcrWebServiceOperation.Settle.Label());
+            Assert.Equal("Check reachability", EcrWebServiceOperation.CheckReachability.Label());
         }
     }
 }

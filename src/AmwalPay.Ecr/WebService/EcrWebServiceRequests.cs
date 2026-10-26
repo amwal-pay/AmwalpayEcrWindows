@@ -67,6 +67,32 @@ namespace AmwalPay.Ecr.WebService
         string OriginalMerchantReference = "") : IEcrWebServiceRequest;
 
     /// <summary>
+    /// Hub <c>/Ecr/settle</c>. The path selects the operation; the body is the
+    /// shared identity payload (no <c>messageType</c>, no amount).
+    /// </summary>
+    public sealed record EcrWebServiceSettleRequest(
+        long MerchantId,
+        long TerminalId,
+        string TerminalSerial,
+        string MerchantReference = "",
+        string CurrencyCode = "512",
+        string EcrId = "ECR01",
+        string TransactionDateTime = "") : IEcrWebServiceRequest;
+
+    /// <summary>
+    /// Hub <c>/Ecr/CheckReachability</c>. Same body as
+    /// <see cref="EcrWebServiceSettleRequest"/>.
+    /// </summary>
+    public sealed record EcrWebServiceCheckReachabilityRequest(
+        long MerchantId,
+        long TerminalId,
+        string TerminalSerial,
+        string MerchantReference = "",
+        string CurrencyCode = "512",
+        string EcrId = "ECR01",
+        string TransactionDateTime = "") : IEcrWebServiceRequest;
+
+    /// <summary>
     /// Hub <c>/Ecr/closeReceipt</c> — send from the till’s Close receipt action.
     /// <para>
     /// <paramref name="OriginalMerchantReference"/> is the money-moving operation's
@@ -145,6 +171,28 @@ namespace AmwalPay.Ecr.WebService
         /// <inheritdoc cref="TransactionStatus"/>
         public static JsonObject Inquiry(EcrWebServiceTransactionStatusRequest request, string secureHashKey = "") =>
             TransactionStatus(request, secureHashKey);
+
+        public static JsonObject Settle(EcrWebServiceSettleRequest request, string secureHashKey = "") =>
+            EcrWebServiceMessage.BuildPlain(
+                merchantId: request.MerchantId,
+                terminalId: request.TerminalId,
+                terminalSerial: request.TerminalSerial,
+                secureHashKey: secureHashKey,
+                currencyCode: request.CurrencyCode,
+                ecrId: request.EcrId,
+                merchantReference: request.MerchantReference,
+                transactionDateTime: request.TransactionDateTime).Json;
+
+        public static JsonObject CheckReachability(EcrWebServiceCheckReachabilityRequest request, string secureHashKey = "") =>
+            EcrWebServiceMessage.BuildPlain(
+                merchantId: request.MerchantId,
+                terminalId: request.TerminalId,
+                terminalSerial: request.TerminalSerial,
+                secureHashKey: secureHashKey,
+                currencyCode: request.CurrencyCode,
+                ecrId: request.EcrId,
+                merchantReference: request.MerchantReference,
+                transactionDateTime: request.TransactionDateTime).Json;
 
         public static JsonObject CloseReceipt(EcrWebServiceCloseReceiptRequest request, string secureHashKey = "") =>
             EcrWebServiceMessage.BuildCloseReceipt(

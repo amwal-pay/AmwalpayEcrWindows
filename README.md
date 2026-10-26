@@ -200,6 +200,34 @@ switch (closed)
 }
 ```
 
+### Settlement
+
+<a id="settlement"></a>
+
+Closes the current batch and prints the settlement receipt. Wi-Fi and USB cable send a `SETTLEMENT` message on the same session as a sale. Web Service posts `/Ecr/settle` with the identity body (no `messageType`). Confirm with the cashier first: the close starts as soon as the request arrives. The terminal must be idle. Uses the full response timeout, because a close can wait on pending reversals. Safe to repeat when the answer is lost: a batch that closed answers `NothingToSettle` the next time, and one that did not settles on the retry. `SupportsSettlement` is true for both transports.
+
+```csharp
+EcrSettlement settlement = await session.SettlementAsync();
+
+switch (settlement)
+{
+    case EcrSettlement.Settled settled:
+        Show(settled.BatchId, settled.NetAmount, settled.Totals);
+        break;
+    case EcrSettlement.NothingToSettle nothing:
+        Show(nothing.Message);
+        break;
+    case EcrSettlement.NotSettled open:
+        Show(open.Reason);
+        break;
+    case EcrSettlement.Failed failed:
+        Show(failed.Failure.Message);  // the batch may or may not have closed
+        break;
+}
+```
+
+Amounts in `Settled` are major units. `Totals` always has `SALE`, `REFUND`, `VOID`, `PRE_AUTH`, and `CAPTURE`, with a zero row where the terminal omitted one. `CloseReceiptAsync` puts the terminal's settlement summary away; it is the same call as after a sale.
+
 ### Reachability
 
 Wi-Fi and USB, before a sale. Proves the port or cable answers. It does not prove the terminal is idle.
@@ -210,7 +238,13 @@ if (probe is { Reachable: false })
     Show(probe.Error);
 ```
 
-Web Service returns `null`. There is no Hub probe. `ProbeTimeout` is 3 seconds.
+`ProbeTimeout` is 3 seconds. Web Service returns `null` from `ProbeReachabilityAsync`, so a sale is not held for a Hub probe.
+
+Check reachability is a separate Web Service call, `POST /Ecr/CheckReachability`, with the same identity body as settle. Call it from its own action. It uses `ProbeTimeout`.
+
+```csharp
+EcrReachability? check = await session.CheckReachabilityAsync();
+```
 
 ## Read the result
 
@@ -332,6 +366,6 @@ Logging is off until you pass a logger. `EcrLogger.None` discards every line. Ea
 
 ## When you build the message yourself
 
-`EcrTransactionType` is `Sale`, `Void`, `Refund`, `Inquiry`, `Receipt`, `CloseReceipt`. `EcrTransactionTypes.MenuOptions` is the operator menu: sale, void, refund, inquiry. `RequiresAmount`, `RequiresOriginalStan`, `RequiresOriginalDate`, `MovesMoney`, and `AllowsOtherTerminal` say which fields that operation needs. `EcrTerminal.RunAsync` accepts only the three that move money.
+`EcrTransactionType` is `Sale`, `Void`, `Refund`, `Inquiry`, `Receipt`, `CloseReceipt`, `Settlement`. `EcrTransactionTypes.MenuOptions` is the operator menu: sale, void, refund, inquiry. `RequiresAmount`, `RequiresOriginalStan`, `RequiresOriginalDate`, `MovesMoney`, and `AllowsOtherTerminal` say which fields that operation needs. `EcrTerminal.RunAsync` accepts only the three that move money.
 
-`EcrWebServiceSaleRequest`, `EcrWebServiceVoidRequest`, `EcrWebServiceRefundRequest`, `EcrWebServiceTransactionStatusRequest`, and `EcrWebServiceCloseReceiptRequest` are for a caller that posts the JSON. `EcrWebServiceRequestJson` writes each body and signs it when you pass the key. The session methods do this themselves.
+`EcrWebServiceSaleRequest`, `EcrWebServiceVoidRequest`, `EcrWebServiceRefundRequest`, `EcrWebServiceTransactionStatusRequest`, `EcrWebServiceCloseReceiptRequest`, `EcrWebServiceSettleRequest`, and `EcrWebServiceCheckReachabilityRequest` are for a caller that posts the JSON. `EcrWebServiceRequestJson` writes each body and signs it when you pass the key. Settle and check-reachability share one body: `version`, `merchantId`, `terminalId`, `terminalSerial`, `ecrId`, `merchantReference`, `currencyCode`, `transactionDateTime`, `requestDateTime`, `secureHashValue`. The session methods do this themselves.

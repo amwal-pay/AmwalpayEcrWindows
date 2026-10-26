@@ -288,6 +288,36 @@ namespace AmwalPay.Ecr.Tests.WebService
         }
 
         [Fact]
+        public void SettleAndCheckReachabilityShareTheIdentityBody()
+        {
+            const string expected =
+                """{"version":1,"merchantId":13593,"terminalId":126706,"terminalSerial":"P653200101973","ecrId":"ECR01","merchantReference":"SET01","currencyCode":"512","transactionDateTime":"20261026120000","requestDateTime":"20261026120000"}""";
+
+            var settle = Wire(EcrWebServiceRequestJson.Settle(new EcrWebServiceSettleRequest(
+                13593, 126706, "P653200101973", "SET01", TransactionDateTime: "20261026120000")));
+            var reachability = Wire(EcrWebServiceRequestJson.CheckReachability(new EcrWebServiceCheckReachabilityRequest(
+                13593, 126706, "P653200101973", "SET01", TransactionDateTime: "20261026120000")));
+
+            Assert.Equal(expected, settle);
+            Assert.Equal(expected, reachability);
+            Assert.DoesNotContain("messageType", settle);
+        }
+
+        [Fact]
+        public void ASignedSettlePutsSecureHashValueLastAndLeavesItOutOfTheSignedText()
+        {
+            var json = EcrWebServiceRequestJson.Settle(
+                new EcrWebServiceSettleRequest(
+                    13593, 126706, "P653200101973", "SET01", TransactionDateTime: "20261026120000"),
+                secureHashKey: WebServiceKey);
+
+            Assert.True(json.ContainsKey(WebServiceSecureHash.Field));
+            Assert.Equal(64, json.Str(WebServiceSecureHash.Field).Length);
+            Assert.DoesNotContain("secureHashValue", WebServiceSecureHash.Compose(json));
+            Assert.DoesNotContain("messageType", EcrJson.Write(json));
+        }
+
+        [Fact]
         public void SignedCloseReceiptIncludesSecureHashValue()
         {
             var json = EcrWebServiceRequestJson.CloseReceipt(
