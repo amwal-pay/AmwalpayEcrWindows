@@ -61,10 +61,17 @@
        is the version consumers get unless they choose a newer one. -->
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0' Or '$(TargetFramework)' == 'net462'">
     <PackageReference Include="System.Text.Json" Version="8.0.6" />
+    <!-- RegistryKey is in the shared framework on net8.0. netstandard2.0 needs the package,
+         and current SDKs no longer add it implicitly. -->
+    <PackageReference Include="Microsoft.Win32.Registry" Version="5.0.0" />
   </ItemGroup>
 
   <!-- A .NET Framework project does not reference System.Net.Http by default; netstandard2.0 gets it
        from NETStandard.Library. Only the compile gate needs this. -->
+  <ItemGroup>
+    <PackageReference Include="System.IO.Ports" Version="8.0.0" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(TargetFramework)' == 'net462'">
     <Reference Include="System.Net.Http" />
   </ItemGroup>

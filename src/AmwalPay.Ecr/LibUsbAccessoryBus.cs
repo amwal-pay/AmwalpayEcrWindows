@@ -43,6 +43,8 @@ namespace AmwalPay.Ecr
 
             lock (Gate)
             {
+                // A device judged earlier is asked again. Bus addresses are reused.
+                _notTerminal.Clear();
                 var count = _api.GetDeviceList(_context, out var devices);
                 if (count < 0)
                 {

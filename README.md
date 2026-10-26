@@ -59,20 +59,38 @@ Hub addresses stay inside the SDK. `EcrEnvironment.FromName` reads `SIT`, `UAT`,
 
 ### USB cable implementation
 
-The till is the USB host and the terminal is the accessory. There is no IP address. The terminal profile is USB cable, and the signing key is the Wi-Fi key. `UsbAccessoryEcrChannel` asks the terminal to enter Android accessory mode, then sends the same framed messages as Wi-Fi.
+There is no IP address. The terminal profile is USB cable, and the signing key is the Wi-Fi key. Windows shows the cable as a COM port, "MediaTek USB VCOM (Android)", at 115200 baud, 8 data bits, no parity, 1 stop bit. The bytes are the same framed messages as Wi-Fi.
 
-On Windows the till attaches the built-in WinUSB driver the first time the cable is used, and Windows asks for approval once. macOS and Linux open the cable with libusb. After the switch the terminal comes back as Google vendor `18D1`.
+The COM number can change the next time the cable is plugged in. Store `SerialPortChoice.Selection` (the USB serial when the device has one) and open `SerialPortBinding.Port` for the sale. `SerialPorts.List` returns only the devices plugged in on that call. A COM port remembered from an earlier plug is not in the list.
 
 ```csharp
+ConnectedPorts listed = SerialPorts.ListFor(saved: storedCable, terminalSerial: "");
+// listed.Ports is what is plugged in now. listed.Selected is what to store.
+
+SerialPortBinding open = SerialPorts.PortFor(listed.Selected);
+if (open.Port.Length == 0)
+{
+    Show("Plug the terminal in. Windows assigns the COM port from the USB serial.");
+    return;
+}
+
 EcrSessionPlan plan = EcrSessions.Plan(
-    link: new EcrLink.UsbCable(),
+    link: new EcrLink.UsbCable(ComPort: open.Port),
     config: new EcrConfig { SecureHashKey = wifiKey });
+
+if (!plan.IsReady)
+{
+    Show(string.Join("; ", plan.Issues));
+    return;
+}
 
 EcrOpenedSession session = EcrSessions.Open(
     "P653200085189",
     plan,
-    usbChannel: () => new UsbAccessoryEcrChannel());
+    usbChannel: () => new SerialEcrChannel(open.Port));
 ```
+
+`Open` requires `usbChannel` for a cable plan. `SerialEcrChannel` opens that COM port for the sale and leaves it closed between calls. A cable session uses the same sale, void, refund, inquiry, e-receipt, and close receipt calls as Wi-Fi.
 
 ## Operations
 
