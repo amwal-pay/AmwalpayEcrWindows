@@ -2,7 +2,7 @@
 
 `AmwalPay.Ecr` drives an Amwal POS terminal from a .NET till: sale, void, refund, inquiry, e-receipt, and close receipt. Wi-Fi and USB use the terminal's ECR port. Web Service uses HTTPS to the Amwal Hub. Card data stays on the terminal.
 
-Package `AmwalPay.Ecr` **1.0.2**. Open one session, call the operation, then read the result.
+Package `AmwalPay.Ecr` **1.0.3**. Open one session, call the operation, then read the result.
 
 ## Install
 
@@ -10,7 +10,7 @@ Package `AmwalPay.Ecr` **1.0.2**. Open one session, call the operation, then rea
 - Web Service is HTTPS. On .NET Framework 4.6.2 the process must allow TLS 1.2.
 
 ```powershell
-dotnet add package AmwalPay.Ecr --version 1.0.2
+dotnet add package AmwalPay.Ecr --version 1.0.3
 ```
 
 Pin the version. A patch release can add API.
@@ -59,9 +59,11 @@ Hub addresses stay inside the SDK. `EcrEnvironment.FromName` reads `SIT`, `UAT`,
 
 ### USB cable implementation
 
-There is no IP address. The terminal profile is USB cable, and the signing key is the Wi-Fi key. Windows shows the cable as a COM port, "MediaTek USB VCOM (Android)", at 115200 baud, 8 data bits, no parity, 1 stop bit. The bytes are the same framed messages as Wi-Fi.
+There is no IP address. The terminal profile is USB cable, and the signing key is the Wi-Fi key. Windows shows the cable as a COM port, "MediaTek USB VCOM (Android)". The bytes are the same framed messages as Wi-Fi.
 
 The COM number can change the next time the cable is plugged in. Store `SerialPortChoice.Selection` (the USB serial when the device has one) and open `SerialPortBinding.Port` for the sale. `SerialPorts.List` returns only the devices plugged in on that call. A COM port remembered from an earlier plug is not in the list.
+
+You need driver to install on system for usb compatibility and work well, amwalpay will provide that driver.
 
 ```csharp
 ConnectedPorts listed = SerialPorts.ListFor(saved: storedCable, terminalSerial: "");
@@ -204,7 +206,7 @@ switch (closed)
 
 <a id="settlement"></a>
 
-Closes the current batch and prints the settlement receipt. Wi-Fi and USB cable send a `SETTLEMENT` message on the same session as a sale. Web Service posts `/Ecr/settle` with the identity body (no `messageType`). Confirm with the cashier first: the close starts as soon as the request arrives. The terminal must be idle. Uses the full response timeout, because a close can wait on pending reversals. Safe to repeat when the answer is lost: a batch that closed answers `NothingToSettle` the next time, and one that did not settles on the retry. `SupportsSettlement` is true for both transports.
+Closes the current batch and prints the settlement receipt. Wi-Fi, USB cable, and Web Service use the same session call. It uses the full response timeout, because a close can wait on pending reversals. Safe to repeat when the answer is lost: a batch that closed answers `NothingToSettle` the next time, and one that did not settles on the retry. `SupportsSettlement` is true for Wi-Fi, USB cable, and Web Service.
 
 ```csharp
 EcrSettlement settlement = await session.SettlementAsync();
@@ -238,9 +240,9 @@ if (probe is { Reachable: false })
     Show(probe.Error);
 ```
 
-`ProbeTimeout` is 3 seconds. Web Service returns `null` from `ProbeReachabilityAsync`, so a sale is not held for a Hub probe.
+`ProbeTimeout` is 3 seconds. A Web Service sale does not run this probe.
 
-Check reachability is a separate Web Service call, `POST /Ecr/CheckReachability`, with the same identity body as settle. Call it from its own action. It uses `ProbeTimeout`.
+On Web Service, check reachability is its own action. It asks whether the terminal is reachable or not.
 
 ```csharp
 EcrReachability? check = await session.CheckReachabilityAsync();
@@ -368,4 +370,4 @@ Logging is off until you pass a logger. `EcrLogger.None` discards every line. Ea
 
 `EcrTransactionType` is `Sale`, `Void`, `Refund`, `Inquiry`, `Receipt`, `CloseReceipt`, `Settlement`. `EcrTransactionTypes.MenuOptions` is the operator menu: sale, void, refund, inquiry. `RequiresAmount`, `RequiresOriginalStan`, `RequiresOriginalDate`, `MovesMoney`, and `AllowsOtherTerminal` say which fields that operation needs. `EcrTerminal.RunAsync` accepts only the three that move money.
 
-`EcrWebServiceSaleRequest`, `EcrWebServiceVoidRequest`, `EcrWebServiceRefundRequest`, `EcrWebServiceTransactionStatusRequest`, `EcrWebServiceCloseReceiptRequest`, `EcrWebServiceSettleRequest`, and `EcrWebServiceCheckReachabilityRequest` are for a caller that posts the JSON. `EcrWebServiceRequestJson` writes each body and signs it when you pass the key. Settle and check-reachability share one body: `version`, `merchantId`, `terminalId`, `terminalSerial`, `ecrId`, `merchantReference`, `currencyCode`, `transactionDateTime`, `requestDateTime`, `secureHashValue`. The session methods do this themselves.
+`EcrWebServiceSaleRequest`, `EcrWebServiceVoidRequest`, `EcrWebServiceRefundRequest`, `EcrWebServiceTransactionStatusRequest`, `EcrWebServiceCloseReceiptRequest`, `EcrWebServiceSettleRequest`, and `EcrWebServiceCheckReachabilityRequest` are for a caller that builds the message. `EcrWebServiceRequestJson` writes each one and signs it when you pass the key. The session methods do this themselves.
