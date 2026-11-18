@@ -4,7 +4,18 @@ Notable changes to `AmwalPay.Ecr`. The format is based on Keep a Changelog 1.1.0
 release can add API or change behaviour (1.0.2 did both): pin an exact version and read
 the entry before you upgrade.
 
-## Unreleased
+## 1.0.4 (2026-11-18)
+
+No existing member changed signature or was removed.
+
+### Changed
+
+- Web Service: `EcrEnvironment.PROD` now resolves to the current production Hub.
+  SIT and UAT are unchanged, and the request paths are unchanged. Affected: a
+  firewall or allowlist that still permits the previous production host. Action:
+  allow the current production host.
+
+## 1.0.3 (2026-10-29)
 
 No existing member was removed. `EcrLink.UsbCable()` still compiles; it now carries `ComPort`.
 

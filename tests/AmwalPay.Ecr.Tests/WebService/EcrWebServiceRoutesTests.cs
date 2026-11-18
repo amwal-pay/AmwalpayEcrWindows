@@ -27,7 +27,7 @@ namespace AmwalPay.Ecr.Tests.WebService
 
             Assert.Equal("https://test.amwalpg.com:25452", sit);
             Assert.Equal("https://test.amwalpg.com:25453", uat);
-            Assert.Equal("https://pos.amwalpg.com", prod);
+            Assert.Equal("https://ecrgateway.amwalpg.com", prod);
             Assert.NotEqual(sit, uat);
             Assert.NotEqual(sit, prod);
             Assert.NotEqual(uat, prod);
@@ -38,7 +38,7 @@ namespace AmwalPay.Ecr.Tests.WebService
         {
             var routes = new EcrWebServiceRoutes(EcrEnvironment.PROD);
 
-            Assert.Equal("https://pos.amwalpg.com/Ecr/Sale", routes.Url(EcrWebServiceOperation.Sale));
+            Assert.Equal("https://ecrgateway.amwalpg.com/Ecr/Sale", routes.Url(EcrWebServiceOperation.Sale));
         }
 
         [Fact]

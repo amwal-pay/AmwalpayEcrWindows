@@ -2,7 +2,7 @@
 
 `AmwalPay.Ecr` drives an Amwal POS terminal from a .NET till: sale, void, refund, inquiry, e-receipt, and close receipt. Wi-Fi and USB use the terminal's ECR port. Web Service uses HTTPS to the Amwal Hub. Card data stays on the terminal.
 
-Package `AmwalPay.Ecr` **1.0.3**. Open one session, call the operation, then read the result.
+Package `AmwalPay.Ecr` **1.0.4**. Open one session, call the operation, then read the result.
 
 ## Install
 
@@ -10,7 +10,7 @@ Package `AmwalPay.Ecr` **1.0.3**. Open one session, call the operation, then rea
 - Web Service is HTTPS. On .NET Framework 4.6.2 the process must allow TLS 1.2.
 
 ```powershell
-dotnet add package AmwalPay.Ecr --version 1.0.3
+dotnet add package AmwalPay.Ecr --version 1.0.4
 ```
 
 Pin the version. A patch release can add API.

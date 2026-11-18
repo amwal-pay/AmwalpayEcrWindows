@@ -14,7 +14,7 @@ namespace AmwalPay.Ecr.Internal
     {
         private const string SitHost = "https://test.amwalpg.com:25452";
         private const string UatHost = "https://test.amwalpg.com:25453";
-        private const string ProdHost = "https://pos.amwalpg.com";
+        private const string ProdHost = "https://ecrgateway.amwalpg.com";
 
         public static string HubSocketUrl(EcrEnvironment environment)
         {
